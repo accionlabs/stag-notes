@@ -9,3 +9,12 @@ show_downloads: false
 # Navigation structure
 header_pages:
   - docs/index.md
+
+# Enable mermaid diagram processing
+markdown: kramdown
+kramdown:
+  syntax_highlighter: rouge
+  
+# Add custom scripts
+mermaid:
+  version: "9.4.3"

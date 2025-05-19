@@ -1,0 +1,73 @@
+---
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ site.title }}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: #24292e;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .mermaid {
+      margin: 20px 0;
+    }
+    pre {
+      background-color: #f6f8fa;
+      border-radius: 3px;
+      padding: 16px;
+      overflow: auto;
+    }
+    .navigation {
+      margin: 20px 0;
+      padding: 10px;
+      background-color: #f6f8fa;
+      border-radius: 3px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js"></script>
+</head>
+<body>
+  <h1>{{ site.title }}</h1>
+  
+  <div class="navigation">
+    <a href="{{ '/' | relative_url }}">Home</a> &gt; 
+    <a href="{{ '/docs/' | relative_url }}">Documentation</a>
+  </div>
+  
+  <div id="content">
+    {{ content }}
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Mermaid
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose'
+      });
+      
+      // Process code blocks
+      document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+        var pre = element.parentElement;
+        var div = document.createElement('div');
+        div.className = 'mermaid';
+        div.textContent = element.textContent;
+        pre.parentNode.replaceChild(div, pre);
+      });
+      
+      // Render diagrams
+      mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+    });
+  </script>
+</body>
+</html>

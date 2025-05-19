@@ -17,6 +17,8 @@ baseurl: "" # the subpath of your site, e.g. /blog
 # Build settings
 markdown: kramdown
 kramdown:
+  syntax_highlighter_options:
+    disable: true
   syntax_highlighter: rouge
   
 # Mermaid configuration

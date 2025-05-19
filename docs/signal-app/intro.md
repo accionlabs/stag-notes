@@ -1,6 +1,5 @@
 ---
 layout:mermaid
-mermaid: true
 ---
 # Signal Product Analysis: Overview, Personas, and User Flows
 

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ page.title }}</title>
-  <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
-  {% include head-custom.html %}
+  <title>{{ page.title | default: site.title }}</title>
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  
+  <!-- Mermaid Script -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js"></script>
 </head>
 <body>
   <div class="container-lg px-3 my-5 markdown-body">
@@ -14,14 +16,13 @@
     {% endif %}
 
     {{ content }}
-
-    {% if site.github.private != true and site.github.license %}
+    
     <div class="footer border-top border-gray-light mt-5 pt-3 text-right text-gray">
-      This site is open source. {% github_edit_link "Improve this page" %}.
+      This site is open source. <a href="{{ site.github.repository_url }}/edit/main/{{ page.path }}">Improve this page</a>.
     </div>
-    {% endif %}
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js"></script>
+  
+  <!-- Initialize Mermaid -->
   <script>
     document.addEventListener("DOMContentLoaded", function() {
       mermaid.initialize({
@@ -30,6 +31,19 @@
         securityLevel: "loose",
         flowchart: { useMaxWidth: false, htmlLabels: true }
       });
+      
+      // Find all pre>code.language-mermaid blocks and replace them with proper div.mermaid
+      document.querySelectorAll('pre > code.language-mermaid').forEach(function(codeBlock) {
+        const mermaidDiv = document.createElement('div');
+        mermaidDiv.className = 'mermaid';
+        mermaidDiv.innerHTML = codeBlock.textContent;
+        
+        const preBlock = codeBlock.parentNode;
+        preBlock.parentNode.replaceChild(mermaidDiv, preBlock);
+      });
+      
+      // Reinitialize mermaid after DOM manipulation
+      mermaid.init(undefined, '.mermaid');
     });
   </script>
 </body>

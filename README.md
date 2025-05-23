@@ -39,14 +39,12 @@ Each markdown file must start with a YAML front matter block to be recognized by
 
 ```yaml
 ---
-layout: docs
 title: "My Note Title"
 description: "Description of the file"
 date: 2025-05-23
 ---
 ```
 
-- `layout`: The layout to use - optional and only available layout is `docs`
 - `title`: The title of your note
 - `description`: Description of your note
 - `date`: (Optional) The date for posts (required in `_posts/`)

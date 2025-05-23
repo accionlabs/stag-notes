@@ -1,0 +1,5 @@
+# Exclude the entire _site directory and its contents
+_site/
+
+# Exclude everything inside _docs, but not the _docs folder itself
+/_docs/*

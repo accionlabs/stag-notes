@@ -22,6 +22,9 @@ window.toggleViewMode = function () {
         transition: 'slide',
         embedded: true,
         
+        // Use white theme for better Mermaid diagram visibility
+        theme: 'white',
+        
         // Simple fixed dimensions - we'll handle scaling ourselves
         width: 1200,
         height: 800,
@@ -128,30 +131,58 @@ function buildSlides() {
   // Get the cleaned content
   const cleanContent = contentCopy.innerHTML;
   
-  // Split content by H2 headers
+  // Split content by H2 headers first
   const h2Regex = /<h2[^>]*>.*?<\/h2>/gi;
   const h2Headers = cleanContent.match(h2Regex) || [];
-  const contentSections = cleanContent.split(h2Regex);
+  const h2Sections = cleanContent.split(h2Regex);
   
   // Clear the slide container
   const slideContainer = document.getElementById('slides-container');
   slideContainer.innerHTML = '';
   
-  // Create slides - skip the first section if it's before any H2
+  // Process each H2 section
   for (let i = 0; i < h2Headers.length; i++) {
-    const slide = document.createElement('section');
+    const h2Content = h2Sections[i + 1] || '';
+    const fullH2Section = h2Headers[i] + h2Content;
     
-    // Combine H2 header with its following content
-    const slideContent = h2Headers[i] + (contentSections[i + 1] || '');
-    slide.innerHTML = slideContent.trim();
+    // Check if this section has H3 headers
+    const h3Regex = /<h3[^>]*>.*?<\/h3>/gi;
+    const h3Headers = h2Content.match(h3Regex) || [];
     
-    slideContainer.appendChild(slide);
+    if (h3Headers.length > 0) {
+      // Create vertical slides for H3 subsections
+      const verticalSection = document.createElement('section');
+      
+      // Split H2 content by H3 headers
+      const h3Sections = h2Content.split(h3Regex);
+      
+      // First slide: H2 + content before first H3
+      const firstSlide = document.createElement('section');
+      const firstSlideContent = h2Headers[i] + (h3Sections[0] || '');
+      firstSlide.innerHTML = firstSlideContent.trim();
+      verticalSection.appendChild(firstSlide);
+      
+      // Subsequent slides: Each H3 + its content
+      for (let j = 0; j < h3Headers.length; j++) {
+        const h3Slide = document.createElement('section');
+        const h3Content = h3Headers[j] + (h3Sections[j + 1] || '');
+        h3Slide.innerHTML = h3Content.trim();
+        verticalSection.appendChild(h3Slide);
+      }
+      
+      slideContainer.appendChild(verticalSection);
+    } else {
+      // No H3 headers, create a single slide
+      const slide = document.createElement('section');
+      slide.innerHTML = fullH2Section.trim();
+      slideContainer.appendChild(slide);
+    }
   }
   
   // If there's content before the first H2, create an intro slide
-  if (contentSections[0] && contentSections[0].trim()) {
+  if (h2Sections[0] && h2Sections[0].trim()) {
     const introSlide = document.createElement('section');
-    introSlide.innerHTML = contentSections[0].trim();
+    introSlide.innerHTML = h2Sections[0].trim();
     slideContainer.insertBefore(introSlide, slideContainer.firstChild);
   }
   
@@ -162,14 +193,15 @@ function buildSlides() {
 }
 
 function scaleSlides() {
-  const slides = document.querySelectorAll('#slides-container section');
+  // Handle both direct slides and nested vertical slides
+  const allSlides = document.querySelectorAll('#slides-container section section, #slides-container > section:not(:has(section))');
   const slideshow = document.getElementById('slideshow-view');
   
   // Get available space (accounting for controls and margins)
   const availableWidth = slideshow.clientWidth - 100;
   const availableHeight = slideshow.clientHeight - 100;
   
-  slides.forEach(slide => {
+  allSlides.forEach(slide => {
     // Reset transform completely before measuring
     slide.style.transform = 'none';
     slide.style.width = 'auto';
@@ -187,16 +219,25 @@ function scaleSlides() {
     const scaleX = availableWidth / contentWidth;
     const scaleY = availableHeight / contentHeight;
     
-    // Use the smaller scale to ensure everything fits
-    const scale = Math.min(scaleX, scaleY);
+    // Use the smaller scale to ensure everything fits, but cap the maximum scale
+    let scale = Math.min(scaleX, scaleY);
     
-    // Apply scaling - remove the translation, just scale
+    // Prevent excessive scaling up - limit maximum scale
+    // This prevents single headings from becoming too large
+    const maxScale = 1.0; // Don't scale beyond 200%
+    scale = Math.min(scale, maxScale);
+    
+    // Also ensure we don't scale down too much for readability
+    const minScale = 0.3; // Don't go below 30%
+    scale = Math.max(scale, minScale);
+    
+    // Apply scaling
     slide.style.transform = `scale(${scale})`;
     
     // Adjust container size to prevent overflow
     slide.style.width = `${contentWidth}px`;
     slide.style.height = `${contentHeight}px`;
     
-    console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale}`);
+    console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
   });
 }

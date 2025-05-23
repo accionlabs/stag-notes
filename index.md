@@ -25,16 +25,3 @@ This is your personal documentation hub. Use the navigation sidebar to explore y
 
 Start exploring your documentation using the sidebar navigation!
 
-<div style="background: yellow; padding: 10px; margin: 10px;">
-  <h4>DEBUG - What files Jekyll sees:</h4>
-  <ul>
-  {% for doc in site.docs %}
-    <li>
-      <strong>Path:</strong> {{ doc.path }}<br>
-      <strong>Title:</strong> {{ doc.title }}<br>
-      <strong>URL:</strong> {{ doc.url }}<br>
-      ---
-    </li>
-  {% endfor %}
-  </ul>
-</div>

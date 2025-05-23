@@ -599,3 +599,194 @@ body {
         width: 250px;
     }
 }
+
+/* Export Options Styling */
+.export-options {
+    margin: 1.5rem 0 2rem 0;
+    padding: 1.25rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e1e4e8;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.export-options h4 {
+    margin: 0 0 1rem 0;
+    color: #586069;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    background: #fff;
+    border: 1px solid #d1d5da;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #24292e;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 0 rgba(27,31,35,0.04);
+}
+
+.export-btn:hover {
+    background: #f6f8fa;
+    border-color: #0366d6;
+    color: #0366d6;
+    text-decoration: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+.export-btn:active {
+    background: #e1e4e8;
+    box-shadow: inset 0 1px 0 rgba(27,31,35,0.15);
+    transform: translateY(0);
+}
+
+.export-btn:focus {
+    outline: 2px solid #0366d6;
+    outline-offset: 2px;
+}
+
+/* Mobile export buttons */
+@media (max-width: 768px) {
+    .export-buttons {
+        flex-direction: column;
+    }
+    
+    .export-btn {
+        justify-content: center;
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .export-options {
+        margin: 1rem 0;
+        padding: 1rem;
+    }
+    
+    .export-buttons {
+        gap: 0.5rem;
+    }
+    
+    .export-btn {
+        padding: 0.75rem 1rem;
+        font-size: 0.8rem;
+    }
+}
+
+/* Slideshow specific styles */
+#slideshow-view {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.reveal {
+  height: 100%;
+  width: 100%;
+}
+
+/* Optimize slide content for fitting */
+.reveal .slides section {
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Ensure all slide content scales together */
+.reveal .slides section > * {
+  flex-shrink: 1;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Make tables responsive in slides */
+.reveal .slides section table {
+  font-size: 0.8em;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Scale down code blocks if needed */
+.reveal .slides section pre {
+  max-height: 60vh;
+  overflow: auto;
+  font-size: 0.7em;
+  margin: 10px 0;
+}
+
+/* Ensure images fit within slides */
+.reveal .slides section img {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+/* Make lists more compact in slides */
+.reveal .slides section ul,
+.reveal .slides section ol {
+  margin: 10px 0;
+  padding-left: 30px;
+}
+
+.reveal .slides section li {
+  margin-bottom: 5px;
+  line-height: 1.4;
+}
+
+/* Compact headings in slides */
+.reveal .slides section h1,
+.reveal .slides section h2,
+.reveal .slides section h3,
+.reveal .slides section h4,
+.reveal .slides section h5,
+.reveal .slides section h6 {
+  margin: 10px 0;
+  line-height: 1.2;
+}
+
+/* Handle long content gracefully */
+.reveal .slides section p {
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+/* Mermaid diagrams in slides */
+.reveal .slides section .mermaid {
+  max-height: 70vh;
+  overflow: visible;
+}
+
+.reveal .slides section .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Remove export options and other unwanted elements from slides */
+.reveal .slides section .export-options,
+.reveal .slides section .no-print {
+  display: none !important;
+}

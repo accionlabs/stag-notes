@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if page.title %}{{ page.title }} - {% endif %}{{ site.title }}</title>
     <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
-  <!-- Mermaid Script -->
+      <!-- Mermaid Script -->
    <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
     </script>
@@ -15,6 +15,19 @@
       max-width: fit-content !important;
     }
    </style>
+  <!-- Reveal.js for slideshow -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/theme/black.css" id="theme">
+  <style>
+  #slideshow-view {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .reveal {
+    height: 100%;
+  }
+</style>
 </head>
 <body>
     <div class="container">
@@ -57,13 +70,52 @@
                     {% if page.description %}
                         <p class="description">{{ page.description }}</p>
                     {% endif %}
+
+                    <!-- Export Options -->
+                    <div class="export-options">
+                        <h4>Export Options:</h4>
+                        <div class="export-buttons">
+                            <button onclick="exportToHTML()" class="export-btn">
+                                💾 Export as HTML
+                            </button>
+                            <button onclick="exportWithMermaid()" class="export-btn">
+                                📊 Export with Diagrams
+                            </button>
+                            <button onclick="copyToClipboard()" class="export-btn">
+                                📋 Copy for Google Docs
+                            </button>
+                            <button onclick="openPrintView()" class="export-btn">
+                                🖨️ Print View
+                            </button>
+                            <button onclick="toggleViewMode()" class="export-btn">
+                                🎛️ Toggle View Mode
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {{ content }}
             </article>
         </main>
+          <!-- Slideshow View (initially hidden) -->
+          <div id="slideshow-view" style="display:none;">
+            <div class="reveal">
+              <div class="slides" id="slides-container"></div>
+            </div>
+          </div>
     </div>
 
     <script src="{{ '/assets/js/navigation.js' | relative_url }}"></script>
+  <!-- Reveal.js -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.js"></script>
+
+  <!-- Slide View Toggle Script -->
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+
+    <script src="{{ '/assets/js/slides.js' | relative_url }}"></script>
+
 </body>
 </html>

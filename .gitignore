@@ -1,5 +1,11 @@
 # Exclude the entire _site directory and its contents
 _site/
 
-# Exclude everything inside _docs, but not the _docs folder itself
+# Exclude everything inside _docs, but not the _docs folder itself or index.md
 /_docs/*
+!/_docs/
+!/_docs/index.md
+
+# Ignore .DS_Store files in all folders
+.DS_Store
+**/.DS_Store

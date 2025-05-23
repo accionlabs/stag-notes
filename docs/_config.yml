@@ -1,0 +1,34 @@
+title: Documentation Site
+description: A collection of documentation with Mermaid diagrams
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+
+# Build settings
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+# Process files without front matter
+defaults:
+  - scope:
+      path: ""  # all files
+    values:
+      layout: default
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: default
+
+# Force processing of all markdown files
+include:
+  - "**/*.md"
+
+# Permalink structure to ensure proper HTML conversion
+permalink: pretty
+
+# Configuration for Mermaid
+mermaid:
+  src: 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js'

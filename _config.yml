@@ -17,23 +17,31 @@ baseurl: "" # the subpath of your site, e.g. /blog
 # Build settings
 markdown: kramdown
 kramdown:
-  syntax_highlighter_options:
-    disable: true
   syntax_highlighter: rouge
+  input: GFM
+  hard_wrap: false
   
 # Mermaid configuration
 mermaid:
   src: 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js'
 
-# Default layout for all pages
+# Permalink settings
+permalink: pretty
+plugins:
+  - jekyll-remote-theme
+
+ Process files without front matter
 defaults:
-  -
-    scope:
-      path: "" # an empty string here means all files in the project
+  - scope:
+      path: ""  # all files
     values:
-      layout: "default"
-  -
-    scope:
-      path: "docs"
+      layout: default
+  - scope:
+      path: ""
+      type: "pages"
     values:
-      layout: "default"
+      layout: default
+
+# Force processing of all markdown files
+include:
+  - "**/*.md"

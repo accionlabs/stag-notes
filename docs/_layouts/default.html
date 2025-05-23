@@ -7,18 +7,27 @@
   <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
   
   <!-- Mermaid Script -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js"></script>
+   <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    </script>
+  <!-- script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js"></script -->
+   <style>
+    .mermaid g.cluster g.cluster-label div {
+      width: fit-content !important;
+      max-width: fit-content !important;
+    }
+   </style>
 </head>
 <body>
-  <div class="container-lg px-3 my-5 markdown-body">
+  <div class="container-lg p-10 m-5 markdown-body" style="padding:50px!important">
     {% if site.title and site.title != page.title %}
-      <h1><a href="{{ "/" | absolute_url }}">{{ site.title }}</a></h1>
+      <a href="{{ "/" | absolute_url }}">< {{ site.title }}</a>
     {% endif %}
 
     {{ content }}
     
     <div class="footer border-top border-gray-light mt-5 pt-3 text-right text-gray">
-      This site is open source. <a href="{{ site.github.repository_url }}/edit/main/{{ page.path }}">Improve this page</a>.
+      Confidential Information. Please do not print or copy without permission.
     </div>
   </div>
   
@@ -29,7 +38,7 @@
         startOnLoad: true,
         theme: "default",
         securityLevel: "loose",
-        flowchart: { useMaxWidth: false, htmlLabels: true }
+        flowchart: { useMaxWidth: 800, htmlLabels: true }
       });
       
       // Find all pre>code.language-mermaid blocks and replace them with proper div.mermaid

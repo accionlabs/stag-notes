@@ -1,3 +1,8 @@
+---
+layout: default
+title: Signal Product Analysis
+---
+
 # Signal Product Analysis: Overview, Personas, and User Flows
 
 ## 1. High-Level Overview

@@ -1,6 +1,6 @@
 // Complete slideshow functionality with custom scaling
 
-window.toggleViewMode = function () {
+window.toggleViewMode = async function () {
   const doc = document.querySelector('.main-content');
   const slides = document.getElementById('slideshow-view');
 
@@ -12,10 +12,21 @@ window.toggleViewMode = function () {
     // Collapse sidebar and store previous state
     collapseSidebarForSlideshow();
     
+    // Clear any existing slides and destroy Reveal instance first
+    const slideContainer = document.getElementById('slides-container');
+    slideContainer.innerHTML = '';
+    
+    // Destroy existing Reveal instance if it exists
+    if (typeof Reveal !== 'undefined' && Reveal.isReady && Reveal.isReady()) {
+      await Reveal.destroy();
+    }
+    
+    // Build slides after destruction is complete
     buildSlides();
     
-    setTimeout(() => {
-      Reveal.initialize({
+    try {
+      // Initialize Reveal and wait for it to be ready
+      await Reveal.initialize({
         controls: true,
         progress: true,
         hash: false,
@@ -44,25 +55,56 @@ window.toggleViewMode = function () {
         }
       });
       
-      // Re-scale when slides change
-      Reveal.addEventListener('slidechanged', function(event) {
-        setTimeout(() => scaleSlides(), 50);
+      // Add event listeners for slide changes and overview mode
+      Reveal.on('slidechanged', function(event) {
+        // Use requestAnimationFrame for smooth scaling
+        requestAnimationFrame(() => scaleSlides());
       });
       
-      Reveal.sync();
-    }, 50);
+      // Handle overview mode transitions
+      Reveal.on('overviewshown', function(event) {
+        // Clear custom scaling when entering overview mode
+        clearSlideScaling();
+      });
+      
+      Reveal.on('overviewhidden', function(event) {
+        // Reapply scaling when exiting overview mode
+        requestAnimationFrame(() => scaleSlides());
+      });
+      
+      // Sync and scale initial slides
+      await Reveal.sync();
+      requestAnimationFrame(() => scaleSlides());
+      
+    } catch (error) {
+      console.error('Failed to initialize Reveal:', error);
+    }
   } else {
     // Switch back to document mode
-    exitSlideshow();
+    await exitSlideshow();
   }
 }
 
-function exitSlideshow() {
+async function exitSlideshow() {
   const doc = document.querySelector('.main-content');
   const slides = document.getElementById('slideshow-view');
   
-  // With embedded mode, we don't need to destroy or clean up styles
-  // Just toggle the visibility
+  // Destroy Reveal instance if it exists and wait for completion
+  if (typeof Reveal !== 'undefined' && Reveal.isReady && Reveal.isReady()) {
+    try {
+      await Reveal.destroy();
+    } catch (error) {
+      console.error('Error destroying Reveal:', error);
+    }
+  }
+  
+  // Clear all slide content to prevent accumulation
+  const slideContainer = document.getElementById('slides-container');
+  if (slideContainer) {
+    slideContainer.innerHTML = '';
+  }
+  
+  // Toggle visibility
   doc.style.display = 'block';
   slides.style.display = 'none';
   
@@ -186,13 +228,15 @@ function buildSlides() {
     slideContainer.insertBefore(introSlide, slideContainer.firstChild);
   }
   
-  // Apply custom scaling after slides are created
-  setTimeout(() => {
-    scaleSlides();
-  }, 100);
+  // Note: We'll call scaleSlides after Reveal is initialized
 }
 
 function scaleSlides() {
+  // Don't scale slides if we're in overview mode
+  if (Reveal.isOverview && Reveal.isOverview()) {
+    return;
+  }
+  
   // Handle both direct slides and nested vertical slides
   const allSlides = document.querySelectorAll('#slides-container section section, #slides-container > section:not(:has(section))');
   const slideshow = document.getElementById('slideshow-view');
@@ -239,5 +283,16 @@ function scaleSlides() {
     slide.style.height = `${contentHeight}px`;
     
     console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
+  });
+}
+
+function clearSlideScaling() {
+  // Remove all custom scaling from slides
+  const allSlides = document.querySelectorAll('#slides-container section section, #slides-container > section:not(:has(section))');
+  
+  allSlides.forEach(slide => {
+    slide.style.transform = '';
+    slide.style.width = '';
+    slide.style.height = '';
   });
 }

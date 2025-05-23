@@ -1,0 +1,61 @@
+{% comment %}
+  Generates breadcrumb navigation based on current page path
+{% endcomment %}
+
+{% assign current_path = page.path | remove: "_docs/" %}
+{% assign path_parts = current_path | split: "/" %}
+
+{% if path_parts.size > 0 %}
+<nav class="breadcrumbs" aria-label="Breadcrumb navigation">
+  <ol class="breadcrumb-list">
+    <li class="breadcrumb-item">
+      <a href="{{ '/' | relative_url }}" class="breadcrumb-link">
+        <span class="breadcrumb-home">🏠</span>
+        Home
+      </a>
+    </li>
+    
+    {% assign current_folder = "" %}
+    {% for i in (0..path_parts.size) %}
+      {% unless forloop.last %}
+        {% if current_folder == "" %}
+          {% assign current_folder = path_parts[i] %}
+        {% else %}
+          {% assign current_folder = current_folder | append: "/" | append: path_parts[i] %}
+        {% endif %}
+        
+        {% comment %} Find the index page for this folder {% endcomment %}
+        {% assign folder_index = null %}
+        {% assign folder_title = path_parts[i] %}
+        {% for doc in site.docs %}
+          {% assign doc_path = doc.path | remove: "_docs/" %}
+          {% if doc_path == current_folder | append: "/index" %}
+            {% assign folder_index = doc %}
+            {% assign folder_title = doc.title | default: path_parts[i] %}
+            {% break %}
+          {% endif %}
+        {% endfor %}
+        
+        <li class="breadcrumb-item">
+          <span class="breadcrumb-separator">/</span>
+          {% if folder_index %}
+            <a href="{{ folder_index.url | relative_url }}" class="breadcrumb-link">
+              {{ folder_title }}
+            </a>
+          {% else %}
+            <span class="breadcrumb-text">{{ folder_title }}</span>
+          {% endif %}
+        </li>
+      {% endunless %}
+    {% endfor %}
+    
+    {% comment %} Current page {% endcomment %}
+    {% unless page.path contains "/index.md" %}
+      <li class="breadcrumb-item breadcrumb-current">
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-text current">{{ page.title | default: page.name | remove: ".md" }}</span>
+      </li>
+    {% endunless %}
+  </ol>
+</nav>
+{% endif %}

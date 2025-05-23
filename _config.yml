@@ -1,47 +1,39 @@
-remote_theme: pages-themes/cayman@v0.2.0
-plugins:
-  - jekyll-remote-theme
-
-title: Documentation Site
-description: A collection of documentation with Mermaid diagrams
-show_downloads: false
-
-# Navigation
-header_pages:
-  - docs/index.md
-
 # Site settings
-url: "" # the base hostname & protocol
-baseurl: "" # the subpath of your site, e.g. /blog
+title: My Documentation
+description: Personal notes and documentation
+url: "http://localhost:4000"
+baseurl: ""
 
 # Build settings
 markdown: kramdown
-kramdown:
-  syntax_highlighter: rouge
-  input: GFM
-  hard_wrap: false
-  
-# Mermaid configuration
-mermaid:
-  src: 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.4.3/mermaid.min.js'
-
-# Permalink settings
+highlighter: rouge
 permalink: pretty
-plugins:
-  - jekyll-remote-theme
 
- Process files without front matter
+# Collections
+collections:
+  docs:
+    output: true
+    permalink: /:collection/:path/
+
+# Default frontmatter
 defaults:
   - scope:
-      path: ""  # all files
+      path: "_docs"
     values:
-      layout: default
-  - scope:
-      path: ""
-      type: "pages"
-    values:
-      layout: default
+      layout: "doc"
+      nav_exclude: false
 
-# Force processing of all markdown files
-include:
-  - "**/*.md"
+# Plugin settings
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+
+# Exclude files
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/

@@ -42,7 +42,7 @@ window.toggleViewMode = async function () {
         
         // Simple fixed dimensions - we'll handle scaling ourselves
         width: '100%',
-        height: '800',
+        height: '100%',
         
         // Disable Reveal's scaling since we're doing it ourselves
         minScale: 1,
@@ -228,15 +228,105 @@ function scaleSlides() {
   const slideshow = document.getElementById('slideshow-view');
   
   // Get available space (accounting for controls and margins)
-  const availableWidth = slideshow.clientWidth - 100;
-  const availableHeight = slideshow.clientHeight - 100;
+  const availableWidth = slideshow.clientWidth;
+  const availableHeight = slideshow.clientHeight-50;
   
   allSlides.forEach(slide => {
     // Reset transform completely before measuring
     slide.style.transform = 'none';
     slide.style.width = 'auto';
     slide.style.height = 'auto';
-    slide.style.transformOrigin = 'top center';
+    slide.style.transformOrigin = 'top left';
+    
+    // Force a reflow
+    slide.offsetHeight;
+    
+    // APPROACH 1: Lock image dimensions before scaling
+    const images = slide.querySelectorAll('img, svg');
+    const imageOriginalStyles = [];
+    
+    images.forEach((img, index) => {
+      // Store original computed styles for potential restoration
+      const computedStyle = window.getComputedStyle(img);
+      imageOriginalStyles[index] = {
+        width: computedStyle.width,
+        height: computedStyle.height,
+        maxWidth: computedStyle.maxWidth,
+        maxHeight: computedStyle.maxHeight,
+        // Store SVG attributes if it's an SVG
+        svgWidth: img.tagName === 'svg' ? img.getAttribute('width') : null,
+        svgHeight: img.tagName === 'svg' ? img.getAttribute('height') : null
+      };
+      
+      // Set explicit dimensions based on current rendered size
+      const actualWidth = img.clientWidth;
+      const actualHeight = img.clientHeight;
+      
+      img.style.width = `${actualWidth}px`;
+      img.style.height = `${actualHeight}px`;
+      img.style.maxWidth = `${actualWidth}px`;
+      img.style.maxHeight = `${actualHeight}px`;
+      
+      // For SVG elements, also set the width and height attributes
+      if (img.tagName === 'svg') {
+        img.setAttribute('width', actualWidth);
+        img.setAttribute('height', actualHeight);
+      }
+    });
+    
+    // Measure the natural content size
+    const contentWidth = slide.scrollWidth;
+    const contentHeight = slide.scrollHeight;
+    
+    // Calculate scale factors
+    const scaleX = availableWidth / contentWidth;
+    const scaleY = availableHeight / contentHeight;
+    
+    // Use the smaller scale to ensure everything fits, but cap the maximum scale
+    let scale = Math.min(scaleX, scaleY);
+    
+    // Prevent excessive scaling up - limit maximum scale
+    // This prevents single headings from becoming too large
+    const maxScale = 1.0; // Don't scale beyond 100%
+    scale = Math.min(scale, maxScale);
+    
+    // Also ensure we don't scale down too much for readability
+    const minScale = 0.3; // Don't go below 30%
+    scale = Math.max(scale, minScale);
+    
+    // Apply scaling
+    slide.style.transform = `scale(${scale})`;
+    
+    // Adjust dimensions to fit the slide container
+    if (scaleY < scaleX) {
+      // Height is the limiting factor
+      slide.style.width = `${availableWidth / scale}px`;
+      slide.style.maxWidth = `${availableWidth / scale}px`;
+    } else {
+      slide.style.height = `${availableHeight / scale}px`;
+      slide.style.maxHeight = `${availableHeight / scale}px`;
+    }
+    
+    console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
+  });
+}
+
+function scaleSlidesOld() {
+  
+  // Handle both direct slides and nested vertical slides
+  const allSlides = document.querySelectorAll('#slides-container section section, #slides-container > section:not(:has(section))');
+  const slideshow = document.getElementById('slideshow-view');
+  
+  // Get available space (accounting for controls and margins)
+  const availableWidth = slideshow.clientWidth;
+  const availableHeight = slideshow.clientHeight;
+  
+  allSlides.forEach(slide => {
+    // Reset transform completely before measuring
+    slide.style.transform = 'none';
+    slide.style.width = 'auto';
+    slide.style.height = 'auto';
+    slide.style.transformOrigin = 'top left';
     
     // Force a reflow
     slide.offsetHeight;
@@ -264,9 +354,15 @@ function scaleSlides() {
     // Apply scaling
     slide.style.transform = `scale(${scale})`;
     
-    // Adjust container size to prevent overflow
-    //slide.style.width = `${contentWidth}px`;
-    //slide.style.height = `${contentHeight}px`;
+    // Adjust dimensions to fit the slide container
+    if (scaleY < scaleX) {
+      // Height is the limiting factor
+      slide.style.width = `${availableWidth / scale}px`;
+      slide.style.maxWidth = `${availableWidth / scale}px`;
+    } else {
+      slide.style.height = `${availableHeight / scale}px`;
+      slide.style.maxHeight = `${availableHeight / scale}px`;
+    }
     
     console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
   });

@@ -416,6 +416,29 @@ body {
     margin-right: 0.25rem;
 }
 
+/* Title and description */
+.meta-data {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f6f8fa;
+    border-left: 4px solid #0366d6;
+}
+
+.page-title {
+    font-size: 0.75rem;
+    font-weight: 200;
+    margin-bottom: 0.2rem;
+    color: #1f2328;
+}
+
+.page-description {
+    font-size: 0.75rem;
+    font-weight: 200;
+    margin-bottom: 0.5rem;
+    color: #666;
+    font-style: italic;
+}
+
 /* Content area */
 .content {
     background: #fff;
@@ -459,16 +482,6 @@ body {
 .content p {
     margin-bottom: 1rem;
     color: #1f2328;
-}
-
-.content .description {
-    font-size: 1.1rem;
-    color: #666;
-    font-style: italic;
-    margin-bottom: 2rem;
-    padding: 1rem;
-    background: #f6f8fa;
-    border-left: 4px solid #0366d6;
 }
 
 .content ul, .content ol {

@@ -16,14 +16,15 @@ window.toggleViewMode = async function () {
     const slideContainer = document.getElementById('slides-container');
     slideContainer.innerHTML = '';
     
+    // Build slides after removing previous content
+    buildSlides();
+
     // Destroy existing Reveal instance if it exists
     if (typeof Reveal !== 'undefined' && Reveal.isReady && Reveal.isReady()) {
       await Reveal.destroy();
     }
     
-    // Build slides after destruction is complete
-    buildSlides();
-    
+    // Initialize Reveal.js
     try {
       // Initialize Reveal and wait for it to be ready
       await Reveal.initialize({
@@ -37,8 +38,8 @@ window.toggleViewMode = async function () {
         theme: 'white',
         
         // Simple fixed dimensions - we'll handle scaling ourselves
-        width: 1200,
-        height: 800,
+        width: '100%',
+        height: '800',
         
         // Disable Reveal's scaling since we're doing it ourselves
         minScale: 1,
@@ -165,7 +166,7 @@ function buildSlides() {
   contentCopy.querySelectorAll('.no-print').forEach(el => el.remove());
   
   // Remove page header (H1) elements
-  contentCopy.querySelectorAll('h1').forEach(el => el.remove());
+  // contentCopy.querySelectorAll('h1').forEach(el => el.remove());
   
   // Remove any remaining export buttons or navigation elements
   contentCopy.querySelectorAll('.export-options, .export-buttons, .export-btn').forEach(el => el.remove());
@@ -279,8 +280,8 @@ function scaleSlides() {
     slide.style.transform = `scale(${scale})`;
     
     // Adjust container size to prevent overflow
-    slide.style.width = `${contentWidth}px`;
-    slide.style.height = `${contentHeight}px`;
+    //slide.style.width = `${contentWidth}px`;
+    //slide.style.height = `${contentHeight}px`;
     
     console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
   });

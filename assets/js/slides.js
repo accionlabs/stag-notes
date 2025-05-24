@@ -57,22 +57,11 @@ window.toggleViewMode = async function () {
       });
       
       // Add event listeners for slide changes and overview mode
-      Reveal.on('slidechanged', function(event) {
+      Reveal.on('ready', function(event) {
         // Use requestAnimationFrame for smooth scaling
         requestAnimationFrame(() => scaleSlides());
       });
-      
-      // Handle overview mode transitions
-      Reveal.on('overviewshown', function(event) {
-        // Clear custom scaling when entering overview mode
-        clearSlideScaling();
-      });
-      
-      Reveal.on('overviewhidden', function(event) {
-        // Reapply scaling when exiting overview mode
-        requestAnimationFrame(() => scaleSlides());
-      });
-      
+            
       // Sync and scale initial slides
       await Reveal.sync();
       requestAnimationFrame(() => scaleSlides());
@@ -233,10 +222,6 @@ function buildSlides() {
 }
 
 function scaleSlides() {
-  // Don't scale slides if we're in overview mode
-  if (Reveal.isOverview && Reveal.isOverview()) {
-    return;
-  }
   
   // Handle both direct slides and nested vertical slides
   const allSlides = document.querySelectorAll('#slides-container section section, #slides-container > section:not(:has(section))');

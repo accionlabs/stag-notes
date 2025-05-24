@@ -39,6 +39,30 @@
       {% endif %}
     {% endfor %}
     
+    {% comment %} Sort files in this folder alphabetically by title (case-insensitive) {% endcomment %}
+    {% assign sorted_folder_files = "" | split: "" %}
+    {% assign file_titles = "" | split: "" %}
+    
+    {% comment %} Create array of titles for sorting {% endcomment %}
+    {% for doc in folder_files %}
+      {% assign display_title = doc.title | default: doc.name | remove: ".md" | downcase %}
+      {% assign file_titles = file_titles | push: display_title %}
+    {% endfor %}
+    
+    {% comment %} Sort titles alphabetically {% endcomment %}
+    {% assign sorted_titles = file_titles | sort %}
+    
+    {% comment %} Rebuild files array in sorted order {% endcomment %}
+    {% for sorted_title in sorted_titles %}
+      {% for doc in folder_files %}
+        {% assign doc_title = doc.title | default: doc.name | remove: ".md" | downcase %}
+        {% if doc_title == sorted_title %}
+          {% assign sorted_folder_files = sorted_folder_files | push: doc %}
+          {% break %}
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+    
     {% comment %} Check if current page is in this folder {% endcomment %}
     {% assign is_current_folder = false %}
     {% assign current_doc_path = page.path | remove: "_docs/" %}
@@ -52,7 +76,7 @@
         <button class="folder-toggle" data-target="folder-{{ folder | slugify }}" aria-expanded="{% if is_current_folder %}true{% else %}false{% endif %}">
           <span class="folder-icon">📁</span>
           <span class="folder-name">{{ folder }}</span>
-          <span class="item-count">({{ folder_files | size }})</span>
+          <span class="item-count">({{ sorted_folder_files | size }})</span>
           <span class="toggle-icon">▶</span>
         </button>
       </div>
@@ -62,7 +86,7 @@
       
       <ul class="nav-subtree {% if is_current_folder %}expanded{% endif %}" id="folder-{{ folder | slugify }}">
         {% comment %} Render files in folder {% endcomment %}
-        {% for doc in folder_files %}
+        {% for doc in sorted_folder_files %}
           {% assign is_current = false %}
           {% if page.path == doc.path %}
             {% assign is_current = true %}

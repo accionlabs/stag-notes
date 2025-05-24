@@ -1,18 +1,31 @@
 {% comment %}
-  Simple, reliable navigation generator for _docs folder
+  Hierarchical navigation generator for _docs folder
+  Configure max_depth at the top
 {% endcomment %}
 
 {% assign docs_pages = site.docs | where_exp: "item", "item.nav_exclude != true" %}
+{% assign max_depth = 4 %}
 
 <ul class="nav-tree">
+  {% comment %} Find all root level folders {% endcomment %}
   {% assign root_folders = "" | split: "" %}
+  {% assign root_files = "" | split: "" %}
   
-  {% comment %} Find all unique root-level folders {% endcomment %}
   {% for doc in docs_pages %}
     {% assign doc_path = doc.path | remove: "_docs/" %}
     {% assign path_parts = doc_path | split: "/" %}
     
-    {% if path_parts.size > 1 %}
+    {% comment %} Debug output for first few docs {% endcomment %}
+    {% comment %}
+    {% if forloop.index <= 5 %}
+      <!-- DEBUG: doc {{ forloop.index }}: "{{ doc_path }}" | parts: {{ path_parts | join: " / " }} | title: {{ doc.title | default: doc.name }} -->
+    {% endif %}
+    {% endcomment %}
+    
+    {% comment %} Skip index.md files from root file list {% endcomment %}
+    {% if path_parts.size == 1 and path_parts[0] != "index.md" %}
+      {% assign root_files = root_files | push: doc %}
+    {% elsif path_parts.size > 1 %}
       {% assign folder_name = path_parts[0] %}
       {% unless root_folders contains folder_name %}
         {% assign root_folders = root_folders | push: folder_name %}
@@ -20,79 +33,280 @@
     {% endif %}
   {% endfor %}
   
-  {% comment %} Render each root folder {% endcomment %}
-  {% for folder in root_folders %}
-    {% comment %} Find files in this folder {% endcomment %}
-    {% assign folder_files = "" | split: "" %}
-    {% assign folder_description = "" %}
+  {% comment %} Sort root folders {% endcomment %}
+  {% assign sorted_root_folders = root_folders | sort_natural %}
+  
+  {% comment %} Sort root files {% endcomment %}
+  {% assign sorted_root_files = "" | split: "" %}
+  {% if root_files.size > 0 %}
+    {% assign file_pairs = "" | split: "" %}
+    {% for doc in root_files %}
+      {% assign sort_key = doc.title | default: doc.name | remove: ".md" | downcase %}
+      {% assign pair = sort_key | append: "|||" | append: forloop.index0 %}
+      {% assign file_pairs = file_pairs | push: pair %}
+    {% endfor %}
+    
+    {% assign sorted_pairs = file_pairs | sort %}
+    {% for pair in sorted_pairs %}
+      {% assign pair_parts = pair | split: "|||" %}
+      {% assign file_index = pair_parts[1] | plus: 0 %}
+      {% assign sorted_root_files = sorted_root_files | push: root_files[file_index] %}
+    {% endfor %}
+  {% endif %}
+  
+  {% comment %} Render each root folder and its contents {% endcomment %}
+  {% for folder_name in sorted_root_folders %}
+    {% assign folder_path = folder_name %}
+    
+    {% comment %} Count direct children {% endcomment %}
+    {% assign child_files_count = 0 %}
+    {% assign child_folders_list = "" | split: "" %}
     
     {% for doc in docs_pages %}
       {% assign doc_path = doc.path | remove: "_docs/" %}
       {% assign path_parts = doc_path | split: "/" %}
       
-      {% if path_parts[0] == folder %}
-        {% if path_parts.size == 2 and path_parts[1] != "index" %}
-          {% assign folder_files = folder_files | push: doc %}
-        {% elsif path_parts[1] == "index" %}
-          {% assign folder_description = doc.description %}
+      {% comment %} Check if this doc is directly in this folder {% endcomment %}
+      {% if path_parts[0] == folder_name %}
+        {% if path_parts.size == 2 and path_parts[1] != "index.md" %}
+          {% assign child_files_count = child_files_count | plus: 1 %}
+        {% elsif path_parts.size == 3 %}
+          {% assign subfolder = path_parts[1] %}
+          {% unless child_folders_list contains subfolder %}
+            {% assign child_folders_list = child_folders_list | push: subfolder %}
+          {% endunless %}
         {% endif %}
       {% endif %}
     {% endfor %}
     
-    {% comment %} Sort files in this folder alphabetically by title (case-insensitive) {% endcomment %}
-    {% assign sorted_folder_files = "" | split: "" %}
-    {% assign file_titles = "" | split: "" %}
+    {% assign total_children = child_files_count | plus: child_folders_list.size %}
     
-    {% comment %} Create array of titles for sorting {% endcomment %}
-    {% for doc in folder_files %}
-      {% assign display_title = doc.title | default: doc.name | remove: ".md" | downcase %}
-      {% assign file_titles = file_titles | push: display_title %}
-    {% endfor %}
-    
-    {% comment %} Sort titles alphabetically {% endcomment %}
-    {% assign sorted_titles = file_titles | sort %}
-    
-    {% comment %} Rebuild files array in sorted order {% endcomment %}
-    {% for sorted_title in sorted_titles %}
-      {% for doc in folder_files %}
-        {% assign doc_title = doc.title | default: doc.name | remove: ".md" | downcase %}
-        {% if doc_title == sorted_title %}
-          {% assign sorted_folder_files = sorted_folder_files | push: doc %}
-          {% break %}
-        {% endif %}
-      {% endfor %}
+    {% comment %} Get folder description and index page {% endcomment %}
+    {% assign folder_description = "" %}
+    {% assign folder_index_page = null %}
+    {% for doc in docs_pages %}
+      {% assign doc_path = doc.path | remove: "_docs/" %}
+      {% assign expected_path = folder_name | append: "/index.md" %}
+      {% if doc_path == expected_path %}
+        {% assign folder_description = doc.description %}
+        {% assign folder_index_page = doc %}
+        {% break %}
+      {% endif %}
     {% endfor %}
     
     {% comment %} Check if current page is in this folder {% endcomment %}
     {% assign is_current_folder = false %}
     {% assign current_doc_path = page.path | remove: "_docs/" %}
     {% assign current_path_parts = current_doc_path | split: "/" %}
-    {% if current_path_parts[0] == folder %}
+    {% if current_path_parts[0] == folder_name %}
       {% assign is_current_folder = true %}
     {% endif %}
     
-    <li class="nav-folder">
+    <li class="nav-folder" data-depth="0" data-path="{{ folder_name }}">
       <div class="nav-folder-header {% if is_current_folder %}active{% endif %}">
-        <button class="folder-toggle" data-target="folder-{{ folder | slugify }}" aria-expanded="{% if is_current_folder %}true{% else %}false{% endif %}">
-          <span class="folder-icon">📁</span>
-          <span class="folder-name">{{ folder }}</span>
-          <span class="item-count">({{ sorted_folder_files | size }})</span>
-          <span class="toggle-icon">▶</span>
-        </button>
+        {% if folder_index_page %}
+          <a href="{{ folder_index_page.url | relative_url }}" class="folder-name-link">
+            <span class="folder-icon">📁</span>
+            <span class="folder-name">{{ folder_name }}</span>
+            <span class="item-count">({{ total_children }})</span>
+          </a>
+          <button class="folder-toggle-only" data-target="folder-{{ folder_name | slugify }}" aria-expanded="{% if is_current_folder %}true{% else %}false{% endif %}">
+            <span class="toggle-icon">{% if is_current_folder %}▼{% else %}▶{% endif %}</span>
+          </button>
+        {% else %}
+          <button class="folder-toggle" data-target="folder-{{ folder_name | slugify }}" aria-expanded="{% if is_current_folder %}true{% else %}false{% endif %}">
+            <span class="folder-icon">📁</span>
+            <span class="folder-name">{{ folder_name }}</span>
+            <span class="item-count">({{ total_children }})</span>
+            <span class="toggle-icon">{% if is_current_folder %}▼{% else %}▶{% endif %}</span>
+          </button>
+        {% endif %}
       </div>
-      {% if folder_description %}
+      
+      {% if folder_description and folder_description != "" %}
         <div class="folder-description">{{ folder_description }}</div>
       {% endif %}
       
-      <ul class="nav-subtree {% if is_current_folder %}expanded{% endif %}" id="folder-{{ folder | slugify }}">
-        {% comment %} Render files in folder {% endcomment %}
+      <ul class="nav-subtree {% if is_current_folder %}expanded{% endif %}" id="folder-{{ folder_name | slugify }}">
+        {% comment %} Find and render subfolders {% endcomment %}
+        {% assign subfolders = "" | split: "" %}
+        {% for doc in docs_pages %}
+          {% assign doc_path = doc.path | remove: "_docs/" %}
+          {% assign path_parts = doc_path | split: "/" %}
+          
+          {% if path_parts[0] == folder_name and path_parts.size >= 3 %}
+            {% assign subfolder_name = path_parts[1] %}
+            {% unless subfolders contains subfolder_name %}
+              {% assign subfolders = subfolders | push: subfolder_name %}
+            {% endunless %}
+          {% endif %}
+        {% endfor %}
+        
+        {% assign sorted_subfolders = subfolders | sort_natural %}
+        
+        {% for subfolder_name in sorted_subfolders %}
+          {% assign subfolder_path = folder_name | append: "/" | append: subfolder_name %}
+          
+          {% comment %} Count subfolder children {% endcomment %}
+          {% assign sub_files_count = 0 %}
+          {% assign sub_folders_list = "" | split: "" %}
+          
+          {% for doc in docs_pages %}
+            {% assign doc_path = doc.path | remove: "_docs/" %}
+            {% assign path_parts = doc_path | split: "/" %}
+            
+            {% if path_parts[0] == folder_name and path_parts[1] == subfolder_name %}
+              {% if path_parts.size == 3 and path_parts[2] != "index.md" %}
+                {% assign sub_files_count = sub_files_count | plus: 1 %}
+              {% elsif path_parts.size == 4 %}
+                {% assign sub_subfolder = path_parts[2] %}
+                {% unless sub_folders_list contains sub_subfolder %}
+                  {% assign sub_folders_list = sub_folders_list | push: sub_subfolder %}
+                {% endunless %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          
+          {% assign sub_total_children = sub_files_count | plus: sub_folders_list.size %}
+          
+          {% comment %} Get subfolder description and index page {% endcomment %}
+          {% assign subfolder_description = "" %}
+          {% assign subfolder_index_page = null %}
+          {% for doc in docs_pages %}
+            {% assign doc_path = doc.path | remove: "_docs/" %}
+            {% assign expected_subfolder_path = subfolder_path | append: "/index.md" %}
+            {% if doc_path == expected_subfolder_path %}
+              {% assign subfolder_description = doc.description %}
+              {% assign subfolder_index_page = doc %}
+              {% break %}
+            {% endif %}
+          {% endfor %}
+          
+          {% comment %} Check if current page is in this subfolder {% endcomment %}
+          {% assign is_current_subfolder = false %}
+          {% assign current_doc_path = page.path | remove: "_docs/" %}
+          {% assign current_path_parts = current_doc_path | split: "/" %}
+          {% if current_path_parts[0] == folder_name and current_path_parts[1] == subfolder_name %}
+            {% assign is_current_subfolder = true %}
+          {% endif %}
+          
+          <li class="nav-folder" data-depth="1" data-path="{{ subfolder_path }}" style="margin-left: 20px;">
+            <div class="nav-folder-header {% if is_current_subfolder %}active{% endif %}">
+              {% if subfolder_index_page %}
+                <a href="{{ subfolder_index_page.url | relative_url }}" class="folder-name-link">
+                  <span class="folder-icon">📂</span>
+                  <span class="folder-name">{{ subfolder_name }}</span>
+                  <span class="item-count">({{ sub_total_children }})</span>
+                </a>
+                <button class="folder-toggle-only" data-target="folder-{{ subfolder_path | slugify }}" aria-expanded="{% if is_current_subfolder %}true{% else %}false{% endif %}">
+                  <span class="toggle-icon">{% if is_current_subfolder %}▼{% else %}▶{% endif %}</span>
+                </button>
+              {% else %}
+                <button class="folder-toggle" data-target="folder-{{ subfolder_path | slugify }}" aria-expanded="{% if is_current_subfolder %}true{% else %}false{% endif %}">
+                  <span class="folder-icon">📂</span>
+                  <span class="folder-name">{{ subfolder_name }}</span>
+                  <span class="item-count">({{ sub_total_children }})</span>
+                  <span class="toggle-icon">{% if is_current_subfolder %}▼{% else %}▶{% endif %}</span>
+                </button>
+              {% endif %}
+            </div>
+            
+            {% if subfolder_description and subfolder_description != "" %}
+              <div class="folder-description">{{ subfolder_description }}</div>
+            {% endif %}
+            
+            <ul class="nav-subtree {% if is_current_subfolder %}expanded{% endif %}" id="folder-{{ subfolder_path | slugify }}">
+              {% comment %} Find and render files in subfolder {% endcomment %}
+              {% assign subfolder_files = "" | split: "" %}
+              {% for doc in docs_pages %}
+                {% assign doc_path = doc.path | remove: "_docs/" %}
+                {% assign path_parts = doc_path | split: "/" %}
+                
+                {% comment %} Only include files that are NOT index.md {% endcomment %}
+                {% if path_parts[0] == folder_name and path_parts[1] == subfolder_name and path_parts.size == 3 and path_parts[2] != "index.md" %}
+                  {% assign subfolder_files = subfolder_files | push: doc %}
+                {% endif %}
+              {% endfor %}
+              
+              {% comment %} Sort and render subfolder files {% endcomment %}
+              {% assign sorted_subfolder_files = "" | split: "" %}
+              {% if subfolder_files.size > 0 %}
+                {% assign sub_file_pairs = "" | split: "" %}
+                {% for doc in subfolder_files %}
+                  {% assign sort_key = doc.title | default: doc.name | remove: ".md" | downcase %}
+                  {% assign pair = sort_key | append: "|||" | append: forloop.index0 %}
+                  {% assign sub_file_pairs = sub_file_pairs | push: pair %}
+                {% endfor %}
+                
+                {% assign sorted_sub_pairs = sub_file_pairs | sort %}
+                {% for pair in sorted_sub_pairs %}
+                  {% assign pair_parts = pair | split: "|||" %}
+                  {% assign file_index = pair_parts[1] | plus: 0 %}
+                  {% assign sorted_subfolder_files = sorted_subfolder_files | push: subfolder_files[file_index] %}
+                {% endfor %}
+              {% endif %}
+              
+              {% for doc in sorted_subfolder_files %}
+                {% assign is_current = false %}
+                {% if page.path == doc.path %}
+                  {% assign is_current = true %}
+                {% endif %}
+                
+                <li class="nav-file" style="margin-left: 40px;">
+                  <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
+                    <span class="file-icon">📄</span>
+                    <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+                  </a>
+                </li>
+              {% endfor %}
+            </ul>
+          </li>
+        {% endfor %}
+        
+        {% comment %} Find and render files directly in root folder {% endcomment %}
+        {% assign folder_files = "" | split: "" %}
+        {% for doc in docs_pages %}
+          {% assign doc_path = doc.path | remove: "_docs/" %}
+          {% assign path_parts = doc_path | split: "/" %}
+          
+          {% comment %} Debug for accion-collateral folder {% endcomment %}
+          {% comment %}
+          {% if folder_name == "accion-collateral" and path_parts[0] == folder_name %}
+            <!-- DEBUG: checking file in {{ folder_name }}: {{ doc_path }} | parts size: {{ path_parts.size }} | filename: {{ path_parts[1] }} -->
+          {% endif %}
+          {% endcomment %}
+          
+          {% comment %} Only include files that are NOT index.md {% endcomment %}
+          {% if path_parts[0] == folder_name and path_parts.size == 2 and path_parts[1] != "index.md" %}
+            {% assign folder_files = folder_files | push: doc %}
+          {% endif %}
+        {% endfor %}
+        
+        {% comment %} Sort and render folder files {% endcomment %}
+        {% assign sorted_folder_files = "" | split: "" %}
+        {% if folder_files.size > 0 %}
+          {% assign folder_file_pairs = "" | split: "" %}
+          {% for doc in folder_files %}
+            {% assign sort_key = doc.title | default: doc.name | remove: ".md" | downcase %}
+            {% assign pair = sort_key | append: "|||" | append: forloop.index0 %}
+            {% assign folder_file_pairs = folder_file_pairs | push: pair %}
+          {% endfor %}
+          
+          {% assign sorted_folder_pairs = folder_file_pairs | sort %}
+          {% for pair in sorted_folder_pairs %}
+            {% assign pair_parts = pair | split: "|||" %}
+            {% assign file_index = pair_parts[1] | plus: 0 %}
+            {% assign sorted_folder_files = sorted_folder_files | push: folder_files[file_index] %}
+          {% endfor %}
+        {% endif %}
+        
         {% for doc in sorted_folder_files %}
           {% assign is_current = false %}
           {% if page.path == doc.path %}
             {% assign is_current = true %}
           {% endif %}
           
-          <li class="nav-file">
+          <li class="nav-file" style="margin-left: 20px;">
             <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
               <span class="file-icon">📄</span>
               <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
@@ -102,4 +316,206 @@
       </ul>
     </li>
   {% endfor %}
+  
+  {% comment %} Render root level files (excluding any index files) {% endcomment %}
+  {% for doc in sorted_root_files %}
+    {% assign doc_path = doc.path | remove: "_docs/" %}
+    {% assign path_parts = doc_path | split: "/" %}
+    
+    {% comment %} Skip any index.md files {% endcomment %}
+    {% if path_parts[0] == "index.md" %}
+      {% continue %}
+    {% endif %}
+    
+    {% assign is_current = false %}
+    {% if page.path == doc.path %}
+      {% assign is_current = true %}
+    {% endif %}
+    
+    <li class="nav-file">
+      <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
+        <span class="file-icon">📄</span>
+        <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+      </a>
+    </li>
+  {% endfor %}
 </ul>
+
+<style>
+.nav-tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-folder, .nav-file {
+  list-style: none;
+  margin: 2px 0;
+}
+
+.nav-subtree {
+  display: none;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-subtree.expanded {
+  display: block;
+}
+
+.folder-name-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  text-decoration: none;
+  color: #333;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  font-size: 14px;
+  flex-grow: 1;
+}
+
+.folder-name-link:hover {
+  background-color: rgba(0,0,0,0.05);
+  text-decoration: none;
+}
+
+.folder-toggle-only {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.folder-toggle-only:hover {
+  background-color: rgba(0,0,0,0.05);
+}
+
+.nav-folder-header {
+  display: flex;
+  align-items: center;
+}
+
+.nav-folder-header:hover {
+  background-color: #f5f5f5;
+}
+
+.nav-folder-header.active {
+  background-color: #e6f3ff;
+}
+
+.folder-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.folder-toggle:hover {
+  background-color: rgba(0,0,0,0.05);
+}
+
+.toggle-icon {
+  font-size: 12px;
+  margin-left: auto;
+  transition: none;
+}
+
+.folder-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.folder-name {
+  font-weight: 500;
+  flex-grow: 1;
+}
+
+.item-count {
+  font-size: 12px;
+  color: #666;
+  background-color: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.folder-description {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 5px 32px;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.nav-file {
+  margin: 1px 0;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  text-decoration: none;
+  color: #333;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.nav-link:hover {
+  background-color: #f5f5f5;
+  text-decoration: none;
+}
+
+.nav-link.current {
+  background-color: #e6f3ff;
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.file-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.file-name {
+  flex-grow: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .nav-folder, .nav-file {
+    margin-left: 0 !important;
+  }
+  
+  .nav-folder[data-depth="1"] {
+    margin-left: 10px !important;
+  }
+  
+  .nav-folder[data-depth="2"] {
+    margin-left: 20px !important;
+  }
+  
+  .nav-folder[data-depth="3"] {
+    margin-left: 30px !important;
+  }
+  
+  .nav-file {
+    margin-left: 10px !important;
+  }
+}
+</style>

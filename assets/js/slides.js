@@ -19,6 +19,9 @@ window.toggleViewMode = async function () {
     // Build slides after removing previous content
     buildSlides();
 
+    // Scale slides to fit the container
+    requestAnimationFrame(() => scaleSlides());
+
     // Destroy existing Reveal instance if it exists
     if (typeof Reveal !== 'undefined' && Reveal.isReady && Reveal.isReady()) {
       await Reveal.destroy();
@@ -57,14 +60,11 @@ window.toggleViewMode = async function () {
       });
       
       // Add event listeners for slide changes and overview mode
-      Reveal.on('ready', function(event) {
+      Reveal.on('overviewhidden', function(event) {
         // Use requestAnimationFrame for smooth scaling
         requestAnimationFrame(() => scaleSlides());
       });
             
-      // Sync and scale initial slides
-      await Reveal.sync();
-      requestAnimationFrame(() => scaleSlides());
       
     } catch (error) {
       console.error('Failed to initialize Reveal:', error);

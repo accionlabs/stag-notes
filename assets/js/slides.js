@@ -52,7 +52,11 @@ startSlideshow = async function () {
       
       keyboard: {
         27: function() { // ESC key
-          exitSlideshow();
+          if (Reveal.isOverview()) {
+            Reveal.toggleOverview(false);
+          } else {
+            exitSlideshow();
+          }
         },
         13: function() { // Enter key
           if (Reveal.isOverview()) {

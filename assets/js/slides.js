@@ -1,6 +1,6 @@
 // Complete slideshow functionality with custom scaling
 
-window.toggleViewMode = async function () {
+startSlideshow = async function () {
   const doc = document.querySelector('.main-content');
   const slides = document.getElementById('slideshow-view');
 
@@ -53,6 +53,13 @@ window.toggleViewMode = async function () {
       keyboard: {
         27: function() { // ESC key
           exitSlideshow();
+        },
+        13: function() { // Enter key
+          if (Reveal.isOverview()) {
+            Reveal.toggleOverview(false);
+          } else {
+            Reveal.toggleOverview(true);
+          }
         },
         37: 'left', 39: 'right', 38: 'up', 40: 'down',
         32: 'next', 33: 'prev', 34: 'next', 35: 'last', 36: 'first'

@@ -4,7 +4,7 @@ window.toggleViewMode = async function () {
   const doc = document.querySelector('.main-content');
   const slides = document.getElementById('slideshow-view');
 
-  if (slides.style.display === 'none') {
+  try {
     // Switch to slideshow mode
     doc.style.display = 'none';
     slides.style.display = 'block';
@@ -16,63 +16,104 @@ window.toggleViewMode = async function () {
     const slideContainer = document.getElementById('slides-container');
     slideContainer.innerHTML = '';
     
-    // Build slides after removing previous content
-    buildSlides();
-
-    // Scale slides to fit the container
-    requestAnimationFrame(() => scaleSlides());
-
     // Destroy existing Reveal instance if it exists
     if (typeof Reveal !== 'undefined' && Reveal.isReady && Reveal.isReady()) {
+      // Exit overview mode if currently active before destroying
+      if (Reveal.isOverview()) {
+        Reveal.toggleOverview(false);
+      }
       await Reveal.destroy();
     }
     
+    // Build slides and wait for DOM to be ready, then scale
+    await buildSlidesAsync();
+    await scaleSlidesAsync();
+
     // Initialize Reveal.js
-    try {
-      // Initialize Reveal and wait for it to be ready
-      await Reveal.initialize({
-        controls: true,
-        progress: true,
-        hash: false,
-        transition: 'slide',
-        embedded: true,
-        
-        // Use white theme for better Mermaid diagram visibility
-        theme: 'white',
-        
-        // Simple fixed dimensions - we'll handle scaling ourselves
-        width: '100%',
-        height: '100%',
-        
-        // Disable Reveal's scaling since we're doing it ourselves
-        minScale: 1,
-        maxScale: 1,
-        margin: 0.1,
-        center: true,
-        
-        keyboard: {
-          27: function() { // ESC key
-            exitSlideshow();
-          },
-          37: 'left', 39: 'right', 38: 'up', 40: 'down',
-          32: 'next', 33: 'prev', 34: 'next', 35: 'last', 36: 'first'
-        }
-      });
+    await Reveal.initialize({
+      controls: true,
+      progress: true,
+      hash: false,
+      transition: 'slide',
+      embedded: true,
       
-      // Add event listeners for slide changes and overview mode
-      Reveal.on('overviewhidden', function(event) {
-        // Use requestAnimationFrame for smooth scaling
-        requestAnimationFrame(() => scaleSlides());
-      });
-            
+      // Use white theme for better Mermaid diagram visibility
+      theme: 'white',
       
-    } catch (error) {
-      console.error('Failed to initialize Reveal:', error);
+      // Simple fixed dimensions - we'll handle scaling ourselves
+      width: '100%',
+      height: '100%',
+      
+      // Disable Reveal's scaling since we're doing it ourselves
+      minScale: 1,
+      maxScale: 1,
+      margin: 0.1,
+      center: true,
+      
+      keyboard: {
+        27: function() { // ESC key
+          exitSlideshow();
+        },
+        37: 'left', 39: 'right', 38: 'up', 40: 'down',
+        32: 'next', 33: 'prev', 34: 'next', 35: 'last', 36: 'first'
+      }
+    });
+    
+    // Force exit overview mode after initialization (in case it persists)
+    if (Reveal.isOverview()) {
+      Reveal.toggleOverview(false);
     }
-  } else {
-    // Switch back to document mode
-    await exitSlideshow();
+    
+    // Force go to first slide to ensure clean start
+    Reveal.slide(0, 0);
+    
+    // Add event listeners for slide changes and overview mode
+    Reveal.on('overviewhidden', function(event) {
+      // Use requestAnimationFrame for smooth scaling
+      requestAnimationFrame(() => scaleSlides());
+    });
+    
+  } catch (error) {
+    console.error('Failed to initialize slideshow:', error);
+    // Revert to document view on error
+    doc.style.display = 'block';
+    slides.style.display = 'none';
+    restoreSidebarFromSlideshow();
+    throw error; // Re-throw to let caller handle if needed
   }
+}
+
+// Async wrapper for buildSlides that waits for DOM rendering
+async function buildSlidesAsync() {
+  return new Promise((resolve, reject) => {
+    try {
+      buildSlides();
+      // Wait for DOM changes to be fully rendered
+      requestAnimationFrame(() => {
+        // Double RAF ensures all layout changes are complete
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// Async wrapper for scaleSlides that waits for scaling to complete
+async function scaleSlidesAsync() {
+  return new Promise((resolve, reject) => {
+    try {
+      scaleSlides();
+      // Wait for scaling transforms to be applied
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 async function exitSlideshow() {
@@ -82,6 +123,16 @@ async function exitSlideshow() {
   // Destroy Reveal instance if it exists and wait for completion
   if (typeof Reveal !== 'undefined' && Reveal.isReady && Reveal.isReady()) {
     try {
+      // Exit overview mode if currently active before destroying
+      if (Reveal.isOverview()) {
+        Reveal.toggleOverview(false);
+      }
+      
+      // Clear any URL hash that Reveal might have set
+      if (window.location.hash) {
+        history.replaceState('', document.title, window.location.pathname + window.location.search);
+      }
+      
       await Reveal.destroy();
     } catch (error) {
       console.error('Error destroying Reveal:', error);
@@ -94,9 +145,19 @@ async function exitSlideshow() {
     slideContainer.innerHTML = '';
   }
   
+  // Force all slides to be hidden (clean up any remaining display: block)
+  const allSlides = document.querySelectorAll('#slides-container section');
+  allSlides.forEach(slide => {
+    slide.style.display = '';
+    slide.style.transform = '';
+    slide.style.width = '';
+    slide.style.height = '';
+  });
+  
   // Toggle visibility
   doc.style.display = 'block';
   slides.style.display = 'none';
+  
   
   // Restore sidebar state
   restoreSidebarFromSlideshow();
@@ -288,63 +349,6 @@ function scaleSlides() {
     // Prevent excessive scaling up - limit maximum scale
     // This prevents single headings from becoming too large
     const maxScale = 1.0; // Don't scale beyond 100%
-    scale = Math.min(scale, maxScale);
-    
-    // Also ensure we don't scale down too much for readability
-    const minScale = 0.3; // Don't go below 30%
-    scale = Math.max(scale, minScale);
-    
-    // Apply scaling
-    slide.style.transform = `scale(${scale})`;
-    
-    // Adjust dimensions to fit the slide container
-    if (scaleY < scaleX) {
-      // Height is the limiting factor
-      slide.style.width = `${availableWidth / scale}px`;
-      slide.style.maxWidth = `${availableWidth / scale}px`;
-    } else {
-      slide.style.height = `${availableHeight / scale}px`;
-      slide.style.maxHeight = `${availableHeight / scale}px`;
-    }
-    
-    console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
-  });
-}
-
-function scaleSlidesOld() {
-  
-  // Handle both direct slides and nested vertical slides
-  const allSlides = document.querySelectorAll('#slides-container section section, #slides-container > section:not(:has(section))');
-  const slideshow = document.getElementById('slideshow-view');
-  
-  // Get available space (accounting for controls and margins)
-  const availableWidth = slideshow.clientWidth;
-  const availableHeight = slideshow.clientHeight;
-  
-  allSlides.forEach(slide => {
-    // Reset transform completely before measuring
-    slide.style.transform = 'none';
-    slide.style.width = 'auto';
-    slide.style.height = 'auto';
-    slide.style.transformOrigin = 'top left';
-    
-    // Force a reflow
-    slide.offsetHeight;
-    
-    // Measure the natural content size
-    const contentWidth = slide.scrollWidth;
-    const contentHeight = slide.scrollHeight;
-    
-    // Calculate scale factors
-    const scaleX = availableWidth / contentWidth;
-    const scaleY = availableHeight / contentHeight;
-    
-    // Use the smaller scale to ensure everything fits, but cap the maximum scale
-    let scale = Math.min(scaleX, scaleY);
-    
-    // Prevent excessive scaling up - limit maximum scale
-    // This prevents single headings from becoming too large
-    const maxScale = 1.0; // Don't scale beyond 200%
     scale = Math.min(scale, maxScale);
     
     // Also ensure we don't scale down too much for readability

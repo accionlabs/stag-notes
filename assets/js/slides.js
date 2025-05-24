@@ -73,6 +73,11 @@ window.toggleViewMode = async function () {
       requestAnimationFrame(() => scaleSlides());
     });
     
+    Reveal.on('overviewshown', function(event) {
+      // Scale slides when overview is shown
+      requestAnimationFrame(() => scaleSlides());
+    });
+    
   } catch (error) {
     console.error('Failed to initialize slideshow:', error);
     // Revert to document view on error
@@ -293,7 +298,11 @@ function scaleSlides() {
   const availableHeight = slideshow.clientHeight-50;
   
   allSlides.forEach(slide => {
-    // Reset transform completely before measuring
+    // Store any existing Reveal.js transforms
+    const currentTransform = slide.style.transform || '';
+    const revealTransforms = extractRevealTransforms(currentTransform);
+    
+    // Temporarily reset transform to measure natural content size
     slide.style.transform = 'none';
     slide.style.width = 'auto';
     slide.style.height = 'auto';
@@ -302,7 +311,7 @@ function scaleSlides() {
     // Force a reflow
     slide.offsetHeight;
     
-    // APPROACH 1: Lock image dimensions before scaling
+    // Lock image dimensions before scaling
     const images = slide.querySelectorAll('img, svg');
     const imageOriginalStyles = [];
     
@@ -355,8 +364,10 @@ function scaleSlides() {
     const minScale = 0.3; // Don't go below 30%
     scale = Math.max(scale, minScale);
     
-    // Apply scaling
-    slide.style.transform = `scale(${scale})`;
+    // Combine our scaling with Reveal's transforms
+    // Apply our scale first, then Reveal's transforms on top
+    const combinedTransform = `${revealTransforms} scale(${scale})`.trim();
+    slide.style.transform = combinedTransform;
     
     // Adjust dimensions to fit the slide container
     if (scaleY < scaleX) {
@@ -368,8 +379,22 @@ function scaleSlides() {
       slide.style.maxHeight = `${availableHeight / scale}px`;
     }
     
-    console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped)`);
+    console.log(`Slide: content=${contentWidth}x${contentHeight}, available=${availableWidth}x${availableHeight}, scale=${scale} (capped), combined transform: ${combinedTransform}`);
   });
+}
+
+// Helper function to extract Reveal.js transforms while preserving our scaling
+function extractRevealTransforms(transformString) {
+  if (!transformString || transformString === 'none') {
+    return '';
+  }
+  
+  // Remove any existing scale() transforms that we might have added
+  // Keep all other transforms (translate, rotate, etc. that Reveal.js adds)
+  const transforms = transformString.match(/(\w+\([^)]+\))/g) || [];
+  const nonScaleTransforms = transforms.filter(transform => !transform.startsWith('scale('));
+  
+  return nonScaleTransforms.join(' ');
 }
 
 function clearSlideScaling() {

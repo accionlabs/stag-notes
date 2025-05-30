@@ -321,40 +321,7 @@ function scaleSlides() {
     
     // Force a reflow
     slide.offsetHeight;
-    
-    // Lock image dimensions before scaling
-    const images = slide.querySelectorAll('img, svg');
-    const imageOriginalStyles = [];
-    
-    images.forEach((img, index) => {
-      // Store original computed styles for potential restoration
-      const computedStyle = window.getComputedStyle(img);
-      imageOriginalStyles[index] = {
-        width: computedStyle.width,
-        height: computedStyle.height,
-        maxWidth: computedStyle.maxWidth,
-        maxHeight: computedStyle.maxHeight,
-        // Store SVG attributes if it's an SVG
-        svgWidth: img.tagName === 'svg' ? img.getAttribute('width') : null,
-        svgHeight: img.tagName === 'svg' ? img.getAttribute('height') : null
-      };
-      
-      // Set explicit dimensions based on current rendered size
-      const actualWidth = img.clientWidth;
-      const actualHeight = img.clientHeight;
-      
-      img.style.width = `${actualWidth}px`;
-      img.style.height = `${actualHeight}px`;
-      img.style.maxWidth = `${actualWidth}px`;
-      img.style.maxHeight = `${actualHeight}px`;
-      
-      // For SVG elements, also set the width and height attributes
-      if (img.tagName === 'svg') {
-        img.setAttribute('width', actualWidth);
-        img.setAttribute('height', actualHeight);
-      }
-    });
-    
+        
     // Measure the natural content size
     const contentWidth = slide.scrollWidth;
     const contentHeight = slide.scrollHeight;

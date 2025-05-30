@@ -55,6 +55,12 @@
 
         <!-- Main content -->
         <main class="main-content">
+            <!-- Logo -->
+             <div class="print-logo">
+                <a href="{{ '/' | relative_url }}">
+                    <img src="{{ '/assets/img/accionlabs-logo.svg' | relative_url }}" alt="{{ site.title }} Logo">
+                </a>
+             </div>
             <!-- Breadcrumbs -->
             <div class="no-print">
                 {% include breadcrumbs.html %}
@@ -75,15 +81,14 @@
                     <div class="export-options">
                         <h4>Actions:</h4>
                         <div class="export-buttons">
-                            <button onclick="exportToHTML()" class="export-btn">
-                                💾 Export as HTML
-                            </button>
                             <button onclick="openPrintView()" class="export-btn">
                                 🖨️ Print View
                             </button>
                             <button onclick="startSlideshow()" class="export-btn">
                                 🎛️ Slide Show
                             </button>
+                            <!-- Dynamic export buttons will be inserted here -->
+                            <div id="quarto-exports"></div>
                         </div>
                     </div>
                 </div>
@@ -100,6 +105,8 @@
     </div>
 
     <script src="{{ '/assets/js/navigation.js' | relative_url }}"></script>
+    <script src="{{ '/assets/js/exports.js' | relative_url }}"></script>
+    <script src="{{ '/assets/js/replace-images.js' | relative_url }}"></script>
   <!-- Reveal.js -->
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@4/dist/reveal.js"></script>
 

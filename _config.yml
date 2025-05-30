@@ -1,5 +1,5 @@
 # Site settings
-title: My Documentation
+title: Notes Manager
 description: Personal notes and documentation
 url: "http://localhost:4000"
 baseurl: ""
@@ -9,11 +9,25 @@ markdown: kramdown
 highlighter: rouge
 permalink: pretty
 
+# Include .qmd files in processing
+include:
+  - "*.qmd"
+
+exclude:
+  - _quarto_cache/
+  # Note: We don't exclude the export files as we want Jekyll to serve them
+
 # Collections
 collections:
   docs:
     output: true
     permalink: /:collection/:path/
+
+# Quarto-specific settings
+quarto:
+  cache_max_age_days: 7
+  enable_diagrams: true
+  math_renderer: katex
 
 # Default frontmatter
 defaults:
@@ -22,13 +36,31 @@ defaults:
     values:
       layout: "doc"
       nav_exclude: false
+  # Add support for .qmd files in docs collection
+  - scope:
+      path: "_docs"
+      type: "docs"
+    values:
+      layout: "doc"
+      nav_exclude: false
+  # Support for .qmd files in posts (if you add posts later)
+  - scope:
+      path: ""
+      type: "posts"
+    values:
+      layout: "post"
+  # Support for standalone .qmd pages
+  - scope:
+      path: "*.qmd"
+    values:
+      layout: "doc"
 
 # Plugin settings
 plugins:
   - jekyll-feed
   - jekyll-sitemap
 
-# Exclude files
+# Exclude files (including Quarto cache)
 exclude:
   - Gemfile
   - Gemfile.lock
@@ -37,3 +69,4 @@ exclude:
   - vendor/cache/
   - vendor/gems/
   - vendor/ruby/
+  - _quarto_cache/

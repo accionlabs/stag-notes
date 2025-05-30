@@ -4,6 +4,7 @@ _site/
 # Exclude everything inside _docs folder
 _docs/*
 !_docs/.gitkeep
+_quarto_cache
 
 # Ignore .DS_Store files
 .DS_Store

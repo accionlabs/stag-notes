@@ -1,6 +1,6 @@
 {% comment %}
   Hierarchical navigation generator for _docs folder
-  Configure max_depth at the top
+  Fixed version that properly handles single subfolders
 {% endcomment %}
 
 {% assign docs_pages = site.docs | where_exp: "item", "item.nav_exclude != true" %}
@@ -14,13 +14,6 @@
   {% for doc in docs_pages %}
     {% assign doc_path = doc.path | remove: "_docs/" %}
     {% assign path_parts = doc_path | split: "/" %}
-    
-    {% comment %} Debug output for first few docs {% endcomment %}
-    {% comment %}
-    {% if forloop.index <= 5 %}
-      <!-- DEBUG: doc {{ forloop.index }}: "{{ doc_path }}" | parts: {{ path_parts | join: " / " }} | title: {{ doc.title | default: doc.name }} -->
-    {% endif %}
-    {% endcomment %}
     
     {% comment %} Skip index.md files from root file list {% endcomment %}
     {% if path_parts.size == 1 and path_parts[0] != "index.md" %}
@@ -70,7 +63,7 @@
       {% if path_parts[0] == folder_name %}
         {% if path_parts.size == 2 and path_parts[1] != "index.md" %}
           {% assign child_files_count = child_files_count | plus: 1 %}
-        {% elsif path_parts.size == 3 %}
+        {% elsif path_parts.size > 2 %}
           {% assign subfolder = path_parts[1] %}
           {% unless child_folders_list contains subfolder %}
             {% assign child_folders_list = child_folders_list | push: subfolder %}
@@ -128,21 +121,8 @@
       {% endif %}
       
       <ul class="nav-subtree {% if is_current_folder %}expanded{% endif %}" id="folder-{{ folder_name | slugify }}">
-        {% comment %} Find and render subfolders {% endcomment %}
-        {% assign subfolders = "" | split: "" %}
-        {% for doc in docs_pages %}
-          {% assign doc_path = doc.path | remove: "_docs/" %}
-          {% assign path_parts = doc_path | split: "/" %}
-          
-          {% if path_parts[0] == folder_name and path_parts.size >= 3 %}
-            {% assign subfolder_name = path_parts[1] %}
-            {% unless subfolders contains subfolder_name %}
-              {% assign subfolders = subfolders | push: subfolder_name %}
-            {% endunless %}
-          {% endif %}
-        {% endfor %}
-        
-        {% assign sorted_subfolders = subfolders | sort_natural %}
+        {% comment %} Find and render subfolders - FIXED LOGIC {% endcomment %}
+        {% assign sorted_subfolders = child_folders_list | sort_natural %}
         
         {% for subfolder_name in sorted_subfolders %}
           {% assign subfolder_path = folder_name | append: "/" | append: subfolder_name %}
@@ -155,10 +135,11 @@
             {% assign doc_path = doc.path | remove: "_docs/" %}
             {% assign path_parts = doc_path | split: "/" %}
             
+            {% comment %} FIXED: Check if this doc belongs to the subfolder {% endcomment %}
             {% if path_parts[0] == folder_name and path_parts[1] == subfolder_name %}
               {% if path_parts.size == 3 and path_parts[2] != "index.md" %}
                 {% assign sub_files_count = sub_files_count | plus: 1 %}
-              {% elsif path_parts.size == 4 %}
+              {% elsif path_parts.size > 3 %}
                 {% assign sub_subfolder = path_parts[2] %}
                 {% unless sub_folders_list contains sub_subfolder %}
                   {% assign sub_folders_list = sub_folders_list | push: sub_subfolder %}
@@ -216,6 +197,112 @@
             {% endif %}
             
             <ul class="nav-subtree {% if is_current_subfolder %}expanded{% endif %}" id="folder-{{ subfolder_path | slugify }}">
+              {% comment %} FIXED: Find and render third-level subfolders {% endcomment %}
+              {% assign sorted_sub_subfolders = sub_folders_list | sort_natural %}
+              
+              {% for sub_subfolder_name in sorted_sub_subfolders %}
+                {% assign sub_subfolder_path = subfolder_path | append: "/" | append: sub_subfolder_name %}
+                
+                {% comment %} Count sub-subfolder children {% endcomment %}
+                {% assign sub_sub_files_count = 0 %}
+                {% for doc in docs_pages %}
+                  {% assign doc_path = doc.path | remove: "_docs/" %}
+                  {% assign path_parts = doc_path | split: "/" %}
+                  
+                  {% if path_parts[0] == folder_name and path_parts[1] == subfolder_name and path_parts[2] == sub_subfolder_name %}
+                    {% if path_parts.size == 4 and path_parts[3] != "index.md" %}
+                      {% assign sub_sub_files_count = sub_sub_files_count | plus: 1 %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+                
+                {% comment %} Get sub-subfolder index page {% endcomment %}
+                {% assign sub_subfolder_index_page = null %}
+                {% for doc in docs_pages %}
+                  {% assign doc_path = doc.path | remove: "_docs/" %}
+                  {% assign expected_sub_subfolder_path = sub_subfolder_path | append: "/index.md" %}
+                  {% if doc_path == expected_sub_subfolder_path %}
+                    {% assign sub_subfolder_index_page = doc %}
+                    {% break %}
+                  {% endif %}
+                {% endfor %}
+                
+                {% comment %} Check if current page is in this sub-subfolder {% endcomment %}
+                {% assign is_current_sub_subfolder = false %}
+                {% assign current_doc_path = page.path | remove: "_docs/" %}
+                {% assign current_path_parts = current_doc_path | split: "/" %}
+                {% if current_path_parts[0] == folder_name and current_path_parts[1] == subfolder_name and current_path_parts[2] == sub_subfolder_name %}
+                  {% assign is_current_sub_subfolder = true %}
+                {% endif %}
+                
+                <li class="nav-folder" data-depth="2" data-path="{{ sub_subfolder_path }}" style="margin-left: 40px;">
+                  <div class="nav-folder-header {% if is_current_sub_subfolder %}active{% endif %}">
+                    {% if sub_subfolder_index_page %}
+                      <a href="{{ sub_subfolder_index_page.url | relative_url }}" class="folder-name-link">
+                        <span class="folder-icon">📄</span>
+                        <span class="folder-name">{{ sub_subfolder_name }}</span>
+                        <span class="item-count">({{ sub_sub_files_count }})</span>
+                      </a>
+                      <button class="folder-toggle-only" data-target="folder-{{ sub_subfolder_path | slugify }}" aria-expanded="{% if is_current_sub_subfolder %}true{% else %}false{% endif %}">
+                        <span class="toggle-icon">{% if is_current_sub_subfolder %}▼{% else %}▶{% endif %}</span>
+                      </button>
+                    {% else %}
+                      <button class="folder-toggle" data-target="folder-{{ sub_subfolder_path | slugify }}" aria-expanded="{% if is_current_sub_subfolder %}true{% else %}false{% endif %}">
+                        <span class="folder-icon">📄</span>
+                        <span class="folder-name">{{ sub_subfolder_name }}</span>
+                        <span class="item-count">({{ sub_sub_files_count }})</span>
+                        <span class="toggle-icon">{% if is_current_sub_subfolder %}▼{% else %}▶{% endif %}</span>
+                      </button>
+                    {% endif %}
+                  </div>
+                  
+                  <ul class="nav-subtree {% if is_current_sub_subfolder %}expanded{% endif %}" id="folder-{{ sub_subfolder_path | slugify }}">
+                    {% comment %} Find and render files in sub-subfolder {% endcomment %}
+                    {% assign sub_subfolder_files = "" | split: "" %}
+                    {% for doc in docs_pages %}
+                      {% assign doc_path = doc.path | remove: "_docs/" %}
+                      {% assign path_parts = doc_path | split: "/" %}
+                      
+                      {% if path_parts[0] == folder_name and path_parts[1] == subfolder_name and path_parts[2] == sub_subfolder_name and path_parts.size == 4 and path_parts[3] != "index.md" %}
+                        {% assign sub_subfolder_files = sub_subfolder_files | push: doc %}
+                      {% endif %}
+                    {% endfor %}
+                    
+                    {% comment %} Sort and render sub-subfolder files {% endcomment %}
+                    {% assign sorted_sub_subfolder_files = "" | split: "" %}
+                    {% if sub_subfolder_files.size > 0 %}
+                      {% assign sub_sub_file_pairs = "" | split: "" %}
+                      {% for doc in sub_subfolder_files %}
+                        {% assign sort_key = doc.title | default: doc.name | remove: ".md" | downcase %}
+                        {% assign pair = sort_key | append: "|||" | append: forloop.index0 %}
+                        {% assign sub_sub_file_pairs = sub_sub_file_pairs | push: pair %}
+                      {% endfor %}
+                      
+                      {% assign sorted_sub_sub_pairs = sub_sub_file_pairs | sort %}
+                      {% for pair in sorted_sub_sub_pairs %}
+                        {% assign pair_parts = pair | split: "|||" %}
+                        {% assign file_index = pair_parts[1] | plus: 0 %}
+                        {% assign sorted_sub_subfolder_files = sorted_sub_subfolder_files | push: sub_subfolder_files[file_index] %}
+                      {% endfor %}
+                    {% endif %}
+                    
+                    {% for doc in sorted_sub_subfolder_files %}
+                      {% assign is_current = false %}
+                      {% if page.path == doc.path %}
+                        {% assign is_current = true %}
+                      {% endif %}
+                      
+                      <li class="nav-file" style="margin-left: 60px;">
+                        <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
+                          <span class="file-icon">📄</span>
+                          <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+                        </a>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </li>
+              {% endfor %}
+              
               {% comment %} Find and render files in subfolder {% endcomment %}
               {% assign subfolder_files = "" | split: "" %}
               {% for doc in docs_pages %}
@@ -268,13 +355,6 @@
         {% for doc in docs_pages %}
           {% assign doc_path = doc.path | remove: "_docs/" %}
           {% assign path_parts = doc_path | split: "/" %}
-          
-          {% comment %} Debug for accion-collateral folder {% endcomment %}
-          {% comment %}
-          {% if folder_name == "accion-collateral" and path_parts[0] == folder_name %}
-            <!-- DEBUG: checking file in {{ folder_name }}: {{ doc_path }} | parts size: {{ path_parts.size }} | filename: {{ path_parts[1] }} -->
-          {% endif %}
-          {% endcomment %}
           
           {% comment %} Only include files that are NOT index.md {% endcomment %}
           {% if path_parts[0] == folder_name and path_parts.size == 2 and path_parts[1] != "index.md" %}

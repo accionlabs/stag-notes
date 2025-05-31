@@ -1,13 +1,16 @@
 #!/bin/bash
 # STAG - Strategy and Technology Advisory Group Documentation Management
-# Usage: ./stag.sh [command] [options]
-# Note: This script should be run from the root of the base Jekyll repository
-# Personal documentation is stored in the _docs/ folder (which is gitignored)
+# Simplified Auto-Sync Version
+# Usage: ./stag.sh
+# Automatically discovers and syncs all accessible STAG repositories
 
 # Configuration
-STAG_ORG="accionlabs"  # Using existing AccionLabs organization
-SCRIPT_VERSION="1.0.0"
-DOCS_DIR="_docs"  # Personal documentation goes here
+STAG_ORG="accionlabs"
+SCRIPT_VERSION="3.0.0"
+DOCS_DIR="_docs"
+CONFIG_FILE=".stag-config.json"
+TEAM_CONFIG_FILE=".stag-team.json"
+CACHE_DURATION=3600  # 1 hour in seconds
 
 # Colors for output
 RED='\033[0;31m'
@@ -27,51 +30,8 @@ ROCKET="🚀"
 FOLDER="📁"
 SYNC="🔄"
 LOCK="🔒"
-CONTRIBUTE="📤"
-DOWNLOAD="📥"
-
-# =============================================================================
-# HELP FUNCTION
-# =============================================================================
-
-show_help() {
-    echo -e "${BLUE}STAG Documentation Management Tool v${SCRIPT_VERSION}${NC}"
-    echo -e "${PURPLE}Strategy and Technology Advisory Group${NC}"
-    echo ""
-    echo -e "${CYAN}USAGE:${NC}"
-    echo "  ./stag.sh [command] [options]"
-    echo "  ${YELLOW}Note: Run from the base Jekyll repository root${NC}"
-    echo "  ${YELLOW}Personal documentation is stored in _docs/ folder${NC}"
-    echo ""
-    echo -e "${CYAN}SETUP COMMANDS:${NC}"
-    echo "  init [name]                      Initialize personal STAG documentation"
-    echo "  add-shared [repo]                Add shared repository to your docs"  
-    echo "  add-project [repo]               Add client project to your docs"
-    echo "  create-project [client]          Create new client project repository"
-    echo "  add-permission [repo] [user] [role]  Grant repository access to team member"
-    echo ""
-    echo -e "${CYAN}DAILY WORKFLOW COMMANDS:${NC}"
-    echo "  sync                             Sync your repositories"
-    echo "  status                           Show status of your repositories"
-    echo "  contribute [path] [msg]          Contribute changes back to shared repositories"
-    echo "  list-permissions [repo]          Show who has access to a repository"
-    echo ""
-    echo -e "${CYAN}EXAMPLES:${NC}"
-    echo "  ./stag.sh init saurabh"
-    echo "  ./stag.sh add-shared stag-shared"
-    echo "  ./stag.sh add-project stag-client-alpha-strategy" 
-    echo "  ./stag.sh sync"
-    echo "  ./stag.sh contribute shared/shared 'Updated proposal template'"
-    echo "  ./stag.sh status"
-    echo ""
-    echo -e "${CYAN}HELP:${NC}"
-    echo "  help, -h, --help         Show this help message"
-    echo "  version, -v, --version   Show version information"
-}
-
-show_version() {
-    echo "STAG Documentation Management Tool v${SCRIPT_VERSION}"
-}
+DISCOVER="🔍"
+CREATE="🆕"
 
 # =============================================================================
 # UTILITY FUNCTIONS  
@@ -97,668 +57,624 @@ log_step() {
     echo -e "${ROCKET} ${BLUE}${1}${NC}"
 }
 
-confirm_action() {
-    local message=$1
-    read -p "$(echo -e ${WARNING}) ${message} (y/N): " confirm
-    [[ $confirm =~ ^[Yy]$ ]]
+log_discover() {
+    echo -e "${DISCOVER} ${PURPLE}${1}${NC}"
 }
 
-# =============================================================================
-# INIT - Initialize STAG consultant documentation
-# =============================================================================
+log_create() {
+    echo -e "${CREATE} ${CYAN}${1}${NC}"
+}
 
-cmd_init() {
-    local consultant_name=${1:-$(whoami)}
-    local repo_name="${consultant_name}-stag-docs"
+check_github_cli() {
+    if ! command -v gh &> /dev/null; then
+        log_error "GitHub CLI (gh) not found. Please install it first."
+        log_info "Install: https://cli.github.com/"
+        return 1
+    fi
+    return 0
+}
+
+get_consultant_name() {
+    local name=$(git config user.name 2>/dev/null)
+    if [ -z "$name" ]; then
+        log_error "Git user.name not set. Please configure it:"
+        log_info "git config user.name 'Your Name'"
+        return 1
+    fi
+    echo "$name" | tr ' ' '-' | tr '[:upper:]' '[:lower:]'
+}
+
+load_team_config() {
+    if [ ! -f "$TEAM_CONFIG_FILE" ]; then
+        log_warning "Team configuration file not found: $TEAM_CONFIG_FILE"
+        log_info "Create it with: {"team_members": {"name": "github-username", ...}}"
+        return 1
+    fi
+    return 0
+}
+
+get_github_username() {
+    local display_name=$1
     
-    log_step "Initializing STAG documentation for ${consultant_name}..."
-    
-    if [ -d "$repo_name" ]; then
-        log_error "Directory ${repo_name} already exists!"
+    if ! load_team_config; then
         return 1
     fi
     
-    # Create main repository structure
-    mkdir -p "${repo_name}"
-    cd "${repo_name}"
+    local github_username=$(jq -r --arg name "$display_name" '.team_members[$name] // empty' "$TEAM_CONFIG_FILE" 2>/dev/null)
     
-    git init
+    if [ -z "$github_username" ]; then
+        log_error "Team member '$display_name' not found in team configuration"
+        return 1
+    fi
     
-    # Create README
-    cat > README.md << EOF
-# ${consultant_name^}'s STAG Documentation
+    echo "$github_username"
+}
+
+validate_team_members() {
+    local team_members_json=$1
+    local lead=$2
+    local project_name=$3
+    
+    if ! load_team_config; then
+        return 1
+    fi
+    
+    local validation_failed=false
+    
+    # Validate lead
+    if [ -n "$lead" ]; then
+        if ! get_github_username "$lead" >/dev/null 2>&1; then
+            log_error "Project $project_name: Lead '$lead' not found in team configuration"
+            validation_failed=true
+        fi
+    fi
+    
+    # Validate team members
+    echo "$team_members_json" | jq -r '.[]' 2>/dev/null | while read member; do
+        if [ -n "$member" ]; then
+            if ! get_github_username "$member" >/dev/null 2>&1; then
+                log_error "Project $project_name: Team member '$member' not found in team configuration"
+                validation_failed=true
+            fi
+        fi
+    done
+    
+    if [ "$validation_failed" = true ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+get_timestamp() {
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+sync_project_permissions() {
+    local project_name=$1
+    local repo_name="stag-project-$project_name"
+    local index_file="$DOCS_DIR/projects/$project_name/index.md"
+    
+    if [ ! -f "$index_file" ]; then
+        log_warning "No index.md found for project: $project_name"
+        return 0
+    fi
+    
+    # Extract front matter using awk
+    local front_matter=$(awk '/^---$/{if(++n==2) exit} n>=1' "$index_file")
+    
+    if [ -z "$front_matter" ]; then
+        log_warning "No front matter found in $project_name/index.md"
+        return 0
+    fi
+    
+    # Parse team information from front matter
+    local lead=$(echo "$front_matter" | grep "^lead:" | sed 's/lead: *//; s/["]//g' | tr -d '"' | xargs)
+    local team_raw=$(echo "$front_matter" | grep "^team:" | sed 's/team: *//')
+    
+    # Convert team to JSON array if it's in YAML format
+    local team_json="[]"
+    if [ -n "$team_raw" ]; then
+        # Handle both formats: team: ["user1", "user2"] and team: [user1, user2]
+        team_json=$(echo "$team_raw" | sed 's/\[/["/; s/\]/"]/' | sed 's/, */", "/g' | sed 's/\["/["/; s/"\]/"]/')
+        # Validate it's proper JSON
+        if ! echo "$team_json" | jq . >/dev/null 2>&1; then
+            team_json="[]"
+        fi
+    fi
+    
+    log_info "Syncing permissions for project: $project_name"
+    if [ -n "$lead" ]; then
+        log_info "  Lead: $lead"
+    fi
+    if [ "$team_json" != "[]" ]; then
+        local team_display=$(echo "$team_json" | jq -r 'join(", ")')
+        log_info "  Team: $team_display"
+    fi
+    
+    # Validate team members exist in configuration
+    if ! validate_team_members "$team_json" "$lead" "$project_name"; then
+        log_error "Team validation failed for project: $project_name"
+        return 1
+    fi
+    
+    # Check if repository exists
+    if ! gh repo view "$STAG_ORG/$repo_name" >/dev/null 2>&1; then
+        log_create "Creating repository: $repo_name"
+        if ! gh repo create "$STAG_ORG/$repo_name" --private --description "STAG project: $project_name"; then
+            log_error "Failed to create repository: $repo_name"
+            return 1
+        fi
+        
+        # Initialize repository with basic structure
+        local temp_dir=$(mktemp -d)
+        cd "$temp_dir"
+        git clone "git@github.com:$STAG_ORG/$repo_name.git"
+        cd "$repo_name"
+        
+        mkdir -p proposal research presentations deliverables
+        echo "# $project_name Project" > README.md
+        echo "" >> README.md
+        echo "This repository was auto-created by STAG system." >> README.md
+        echo "The team configuration is managed via the index.md file." >> README.md
+        
+        git add .
+        git commit -m "Initial repository structure"
+        git push
+        
+        cd ../../..
+        rm -rf "$temp_dir"
+    fi
+    
+    # Set lead permissions (admin)
+    if [ -n "$lead" ]; then
+        local lead_github=$(get_github_username "$lead")
+        if [ -n "$lead_github" ]; then
+            if gh api repos/"$STAG_ORG"/"$repo_name"/collaborators/"$lead_github" -X PUT -f permission=admin >/dev/null 2>&1; then
+                log_success "  Set admin access for lead: $lead ($lead_github)"
+            else
+                log_warning "  Failed to set admin access for lead: $lead"
+            fi
+        fi
+    fi
+    
+    # Set team member permissions (push)
+    echo "$team_json" | jq -r '.[]' 2>/dev/null | while read member; do
+        if [ -n "$member" ]; then
+            local member_github=$(get_github_username "$member")
+            if [ -n "$member_github" ]; then
+                if gh api repos/"$STAG_ORG"/"$repo_name"/collaborators/"$member_github" -X PUT -f permission=push >/dev/null 2>&1; then
+                    log_success "  Set push access for: $member ($member_github)"
+                else
+                    log_warning "  Failed to set push access for: $member"
+                fi
+            fi
+        fi
+    done
+    
+    return 0
+}
+
+is_cache_valid() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return 1
+    fi
+    
+    local last_scan=$(jq -r '.last_scan // empty' "$CONFIG_FILE" 2>/dev/null)
+    if [ -z "$last_scan" ]; then
+        return 1
+    fi
+    
+    local last_epoch=$(date -d "$last_scan" +%s 2>/dev/null || echo 0)
+    local current_epoch=$(date +%s)
+    local age=$((current_epoch - last_epoch))
+    
+    [ $age -lt $CACHE_DURATION ]
+}
+
+# =============================================================================
+# REPOSITORY DISCOVERY
+# =============================================================================
+
+discover_repositories() {
+    local consultant=$(get_consultant_name)
+    if [ -z "$consultant" ]; then
+        return 1
+    fi
+    
+    log_discover "Discovering accessible STAG repositories for: $consultant"
+    
+    if ! check_github_cli; then
+        return 1
+    fi
+    
+    # Initialize repository lists
+    local private_repo="stag-private-$consultant"
+    local shared_repo="stag-shared"
+    local projects=()
+    
+    # Check if private repository exists, create if not
+    log_discover "Checking private repository: $private_repo"
+    if ! gh repo view "$STAG_ORG/$private_repo" >/dev/null 2>&1; then
+        log_create "Creating private repository: $private_repo"
+        if gh repo create "$STAG_ORG/$private_repo" --private --description "STAG private documentation for $consultant"; then
+            log_success "Private repository created"
+        else
+            log_error "Failed to create private repository"
+            return 1
+        fi
+    else
+        log_info "Private repository found"
+    fi
+    
+    # Check shared repository
+    log_discover "Checking shared repository: $shared_repo"
+    if gh repo view "$STAG_ORG/$shared_repo" >/dev/null 2>&1; then
+        log_info "Shared repository found"
+    else
+        log_warning "Shared repository not found: $shared_repo"
+        shared_repo=""
+    fi
+    
+    # Discover project repositories
+    log_discover "Scanning for accessible project repositories..."
+    local repo_list=$(gh repo list "$STAG_ORG" --search "stag-project" --json name,name --jq '.[].name' 2>/dev/null || echo "")
+    
+    for repo in $repo_list; do
+        if [[ "$repo" =~ ^stag-project-.+ ]]; then
+            # Check if we have access to this repository
+            if gh repo view "$STAG_ORG/$repo" >/dev/null 2>&1; then
+                local project_name=$(echo "$repo" | sed 's/^stag-project-//')
+                projects+=("$repo")
+                log_info "Project found: $project_name"
+            fi
+        fi
+    done
+    
+    # Create configuration
+    local config=$(jq -n \
+        --arg consultant "$consultant" \
+        --arg timestamp "$(get_timestamp)" \
+        --arg private "$private_repo" \
+        --arg shared "$shared_repo" \
+        --argjson projects "$(printf '%s\n' "${projects[@]}" | jq -R . | jq -s .)" \
+        '{
+            consultant: $consultant,
+            last_scan: $timestamp,
+            repositories: {
+                private: $private,
+                shared: ($shared | select(. != "")),
+                projects: $projects
+            }
+        }')
+    
+    echo "$config" > "$CONFIG_FILE"
+    
+    log_success "Repository discovery completed"
+    log_info "Found: 1 private, $([ -n "$shared_repo" ] && echo "1" || echo "0") shared, ${#projects[@]} projects"
+    
+    return 0
+}
+
+load_config() {
+    if is_cache_valid; then
+        log_info "Using cached repository configuration"
+        return 0
+    else
+        log_step "Repository cache expired or missing, discovering repositories..."
+        discover_repositories
+    fi
+}
+
+# =============================================================================
+# INITIALIZATION
+# =============================================================================
+
+initialize_docs() {
+    local consultant=$(get_consultant_name)
+    if [ -z "$consultant" ]; then
+        return 1
+    fi
+    
+    log_step "Initializing STAG documentation structure..."
+    
+    # Create main docs directory if it doesn't exist
+    if [ ! -d "$DOCS_DIR" ]; then
+        mkdir -p "$DOCS_DIR"
+        cd "$DOCS_DIR"
+        git init
+        cd ..
+        log_create "Created documentation directory"
+    fi
+    
+    # Create subdirectories
+    mkdir -p "$DOCS_DIR/private"
+    mkdir -p "$DOCS_DIR/shared" 
+    mkdir -p "$DOCS_DIR/projects"
+    
+    # Create main index if it doesn't exist
+    if [ ! -f "$DOCS_DIR/index.md" ]; then
+        cat > "$DOCS_DIR/index.md" << EOF
+---
+title: "${consultant^}'s STAG Documentation"
+description: "Personal documentation and project workspace"
+date: $(date +%Y-%m-%d)
+---
+
+# ${consultant^}'s STAG Documentation
 
 ## Quick Navigation
+
 - [Private Notes](private/) - Personal methodologies and insights
-- [Active Projects](projects/) - Client work and engagements  
-- [Shared Assets](shared/) - STAG team resources
-- [Published Content](published/) - Organization-wide publications
+- [Shared Resources](shared/) - STAG team resources
+- [Active Projects](projects/) - Client work and engagements
 
-## Getting Started
-\`\`\`bash
-# Sync latest shared content
-../stag.sh sync
+## Usage
 
-# Start offline documentation server
-../stag.sh serve
-
-# Check repository status  
-../stag.sh status
-\`\`\`
+Run \`./stag.sh\` to automatically sync all repositories.
 
 ## Last Updated
 $(date)
 
 ---
-*Generated by STAG Documentation Management Tool*
+*Generated by STAG Documentation Management Tool v${SCRIPT_VERSION}*
 EOF
-
-    # Create folder structure
-    mkdir -p private/{methodologies,insights,client-notes}
-    mkdir -p projects
-    mkdir -p shared  
-    mkdir -p published
-    
-    # Create simple index page
-    cat > index.md << EOF
-# ${consultant_name^}'s STAG Documentation
-
-## Quick Links
-- [Private Methodologies](private/methodologies/)
-- [Client Insights](private/insights/) 
-- [Shared Templates](shared/templates/)
-- [Active Projects](projects/)
-
-## Recent Updates
-*Use \`../stag.sh status\` to see latest changes*
-EOF
-
-    # Create sample private content
-    cat > private/methodologies/README.md << EOF
-# Personal Methodologies
-
-This folder contains your private consulting methodologies and frameworks.
-
-## Getting Started
-- Document your unique approaches and techniques
-- Keep client-specific insights confidential
-- Share general methodologies with the team via shared repositories
-EOF
-
-    # Copy stag.sh script to parent directory if it doesn't exist
-    if [ ! -f "../stag.sh" ]; then
-        cp "$0" "../stag.sh" 2>/dev/null || log_warning "Copy stag.sh script manually to parent directory"
+        log_create "Created main index file"
     fi
     
-    # Initial commit
-    git add .
-    git commit -m "Initial STAG documentation setup for ${consultant_name}"
+    # Create private README if it doesn't exist
+    if [ ! -f "$DOCS_DIR/private/README.md" ]; then
+        cat > "$DOCS_DIR/private/README.md" << EOF
+---
+title: "Private Documentation"
+description: "Personal methodologies and confidential notes"
+date: $(date +%Y-%m-%d)
+---
+
+# Private Documentation
+
+This folder contains your personal consulting methodologies and frameworks.
+
+## Organization
+
+Create folders and files as needed:
+- **methodologies/** - Your unique approaches and techniques
+- **insights/** - Industry insights and observations  
+- **client-notes/** - Confidential client relationship notes
+
+## Getting Started
+
+- Document your unique approaches and techniques
+- Keep client-specific insights confidential
+- Changes are automatically synced to your private repository
+EOF
+        log_create "Created private documentation structure"
+    fi
     
-    log_success "STAG documentation initialized for ${consultant_name}"
-    log_info "Repository created: ${FOLDER} ${repo_name}"
-    log_info "Next steps:"
-    echo "  1. cd ${repo_name}" 
-    echo "  2. ../stag.sh add-shared stag-shared-templates"
-    echo "  3. ../stag.sh add-project stag-client-[project-name]"
-    echo "  4. ../stag.sh serve"
+    log_success "Documentation structure initialized"
 }
 
 # =============================================================================
-# ADD-SHARED - Add shared STAG repositories
+# REPOSITORY SYNCHRONIZATION
 # =============================================================================
 
-cmd_add_shared() {
-    local repo_name=$1
-    local local_path=$2
+sync_repository() {
+    local repo_type=$1
+    local repo_name=$2
+    local local_path=$3
     
     if [ -z "$repo_name" ]; then
-        log_info "Available shared repositories:"
-        echo "  • stag-shared"
-        echo ""
-        read -p "Enter repository name: " repo_name
+        return 0
     fi
     
-    if [ ! -d "$DOCS_DIR" ] || [ ! -d "$DOCS_DIR/.git" ]; then
-        log_error "Personal documentation not initialized. Run: ./stag.sh init"
-        return 1
-    fi
+    local repo_url="git@github.com:$STAG_ORG/$repo_name.git"
     
-    # Auto-determine local path if not provided
-    if [ -z "$local_path" ]; then
-        case $repo_name in
-            *shared*)
-                local_path="shared/shared"
-                ;;
-            *)
-                read -p "Enter local path (e.g., shared/shared): " local_path
-                ;;
-        esac
-    fi
-    
-    log_step "Adding ${repo_name} to your documentation..."
-    
-    # Navigate to documentation directory
     cd "$DOCS_DIR"
     
-    # Check if path already exists
+    # Check if local path exists and is a git subtree
     if [ -d "$local_path" ]; then
-        if ! confirm_action "Path ${local_path} already exists. Replace it?"; then
-            log_info "Operation cancelled"
-            cd ..
-            return 0
+        # Try to sync existing subtree
+        echo -n "${SYNC} Syncing $repo_type ($repo_name)... "
+        
+        # Pull changes from remote
+        if git subtree pull --prefix="$local_path" "$repo_url" main --squash >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC}"
+        else
+            echo -e "${YELLOW}conflicts${NC}"
+            log_warning "Merge conflicts in $repo_type - attempting auto-resolve"
+            
+            # Auto-resolve conflicts by preferring remote changes
+            git checkout --theirs "$local_path"
+            git add "$local_path"
+            git commit -m "Auto-resolved conflicts in $repo_type" >/dev/null 2>&1
+            echo -e "  ${INFO} Auto-resolved conflicts"
         fi
-        rm -rf "$local_path"
-    fi
-    
-    # Add git subtree
-    git subtree add --prefix="${local_path}" \
-        "git@github.com:${STAG_ORG}/${repo_name}.git" main --squash
-    
-    if [ $? -eq 0 ]; then
-        log_success "Successfully added ${repo_name}"
-        log_info "${FOLDER} Available at: ${DOCS_DIR}/${local_path}/"
+        
+        # Push local changes if any
+        if ! git diff --quiet "$local_path" || ! git diff --cached --quiet "$local_path"; then
+            git add "$local_path"
+            git commit -m "Auto-sync: Updated $repo_type" >/dev/null 2>&1
+            
+            if git subtree push --prefix="$local_path" "$repo_url" main >/dev/null 2>&1; then
+                echo -e "  ${SUCCESS} Pushed local changes"
+            else
+                echo -e "  ${WARNING} Failed to push local changes"
+            fi
+        fi
     else
-        log_error "Failed to add ${repo_name}"
-        log_info "Check repository name and permissions"
+        # Add new subtree
+        echo -n "${SYNC} Adding $repo_type ($repo_name)... "
+        
+        if git subtree add --prefix="$local_path" "$repo_url" main --squash >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC}"
+        else
+            echo -e "${RED}✗${NC}"
+            log_error "Failed to add $repo_type repository"
+        fi
     fi
     
-    # Return to base repository root
     cd ..
 }
 
-# =============================================================================
-# ADD-PROJECT - Add client project repository
-# =============================================================================
-
-cmd_add_project() {
-    local consultant_name=$1
-    local project_repo=$2
+sync_all_repositories() {
+    log_step "Starting repository synchronization..."
     
-    if [ -z "$consultant_name" ]; then
-        log_error "Usage: ./stag.sh add-project [consultant-name] [project-repo-name]"
-        log_info "Example: ./stag.sh add-project saurabh stag-client-alpha-strategy"
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_error "No configuration found. Please run discovery first."
         return 1
     fi
     
-    local consultant_dir="${DOCS_DIR}/${consultant_name}-stag-docs"
+    # Read configuration
+    local private_repo=$(jq -r '.repositories.private // empty' "$CONFIG_FILE")
+    local shared_repo=$(jq -r '.repositories.shared // empty' "$CONFIG_FILE")
+    local projects=($(jq -r '.repositories.projects[]? // empty' "$CONFIG_FILE"))
     
-    if [ ! -d "$consultant_dir" ]; then
-        log_error "Consultant documentation not found: ${consultant_dir}"
-        log_info "Run: ./stag.sh init ${consultant_name}"
-        return 1
+    # Sync private repository
+    if [ -n "$private_repo" ]; then
+        sync_repository "private" "$private_repo" "private"
     fi
     
-    if [ -z "$project_repo" ]; then
-        log_info "Enter client project repository name"
-        echo "  Example: stag-client-alpha-strategy"
-        read -p "Project repository: " project_repo
+    # Sync shared repository
+    if [ -n "$shared_repo" ]; then
+        sync_repository "shared" "$shared_repo" "shared"
     fi
     
-    # Extract project name for local path
-    local project_name=$(echo "$project_repo" | sed 's/stag-client-//' | sed 's/stag-//')
-    local local_path="projects/${project_name}"
-    
-    log_step "Adding client project: ${project_repo} to ${consultant_name}'s documentation"
-    log_info "${FOLDER} Local path: ${consultant_dir}/${local_path}"
-    
-    # Security confirmation
-    if ! confirm_action "${LOCK} Confirm ${consultant_name} has access to this confidential client project"; then
-        log_warning "Operation cancelled for security"
-        return 1
-    fi
-    
-    # Navigate to consultant's directory
-    cd "$consultant_dir"
-    
-    # Check if path already exists
-    if [ -d "$local_path" ]; then
-        if ! confirm_action "Project ${project_name} already exists. Replace it?"; then
-            log_info "Operation cancelled"
-            cd ../..
-            return 0
+    # Sync project repositories
+    for project_repo in "${projects[@]}"; do
+        if [ -n "$project_repo" ]; then
+            local project_name=$(echo "$project_repo" | sed 's/^stag-project-//')
+            sync_repository "project" "$project_repo" "projects/$project_name"
         fi
-        rm -rf "$local_path"
-    fi
+    done
     
-    # Add git subtree
-    git subtree add --prefix="${local_path}" \
-        "git@github.com:${STAG_ORG}/${project_repo}.git" main --squash
-    
-    if [ $? -eq 0 ]; then
-        log_success "Successfully added client project"
-        log_info "${FOLDER} Available at: ${consultant_dir}/${local_path}/"
-        log_warning "${LOCK} Remember: This contains confidential client information"
-    else
-        log_error "Failed to add project - check repository name and access permissions"
-    fi
-    
-    # Return to base repository root
-    cd ../..
+    log_success "Repository synchronization completed"
 }
 
 # =============================================================================
-# SYNC - Sync all STAG repositories
+# STATUS REPORTING
 # =============================================================================
 
-cmd_sync() {
-    log_step "Starting STAG repository sync..."
+show_status() {
+    echo -e "${BLUE}📊 STAG Auto-Sync Status${NC}"
+    echo "========================"
     
-    # Function to sync a subtree
-    sync_subtree() {
-        local local_path=$1
-        local repo_url=$2  
-        local repo_name=$(basename "$repo_url" .git)
+    local consultant=$(get_consultant_name)
+    echo -e "${FOLDER} Consultant: ${CYAN}$consultant${NC}"
+    echo -e "${FOLDER} Base repository: ${CYAN}$(basename $(pwd))${NC}"
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        local last_scan=$(jq -r '.last_scan // empty' "$CONFIG_FILE")
+        echo -e "🕐 Last scan: ${CYAN}$last_scan${NC}"
         
-        if [ -d "$local_path" ]; then
-            echo -n "${DOWNLOAD} Syncing ${repo_name}... "
-            if git subtree pull --prefix="$local_path" "$repo_url" main --squash >/dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC}"
-            else
-                echo -e "${RED}✗${NC}"
-                log_error "Failed to sync $repo_name"
-            fi
-        fi
-    }
-    
-    # Sync shared repositories
-    sync_subtree "shared/templates" "git@github.com:${STAG_ORG}/stag-shared-templates.git"
-    sync_subtree "shared/methodologies" "git@github.com:${STAG_ORG}/stag-shared-methodologies.git"
-    sync_subtree "shared/research" "git@github.com:${STAG_ORG}/stag-shared-research.git"
-    
-    # Sync published content
-    sync_subtree "published/whitepapers" "git@github.com:${STAG_ORG}/stag-published-whitepapers.git"
-    
-    # Sync project repositories (dynamically find them)
-    if [ -d "projects" ]; then
-        for project_dir in projects/*/; do
-            if [ -d "$project_dir" ]; then
-                local project_name=$(basename "$project_dir")
-                local repo_name="stag-client-${project_name}"
-                sync_subtree "projects/${project_name}" "git@github.com:${STAG_ORG}/${repo_name}.git"  
-            fi
-        done
-    fi
-    
-    log_success "STAG sync completed!"
-}
-
-# =============================================================================
-# STATUS - Show status of all STAG repositories
-# =============================================================================
-
-cmd_status() {
-    echo -e "${BLUE}📊 STAG Repository Status${NC}"
-    echo "========================="
-    
-    # Current repository info
-    echo -e "${FOLDER} Current repository: ${CYAN}$(basename $(pwd))${NC}"
-    local current_branch=$(git branch --show-current 2>/dev/null)
-    if [ -n "$current_branch" ]; then
-        echo -e "🌿 Current branch: ${CYAN}${current_branch}${NC}"
-    fi
-    echo ""
-    
-    # Count repositories
-    local shared_count=0
-    local project_count=0
-    local published_count=0
-    
-    # Show shared repositories
-    echo -e "${PURPLE}📚 Shared Assets:${NC}"
-    if [ -d "shared" ]; then
-        for dir in shared/*/; do
-            if [ -d "$dir" ]; then
-                local repo_name=$(basename "$dir")
-                echo "  ✓ $repo_name"
-                ((shared_count++))
-            fi
-        done
-    fi
-    [ $shared_count -eq 0 ] && echo "  (none)"
-    
-    # Show active projects
-    echo ""
-    echo -e "${RED}🏢 Active Client Projects:${NC}"
-    if [ -d "projects" ]; then
-        for dir in projects/*/; do
-            if [ -d "$dir" ]; then
-                local project_name=$(basename "$dir")
-                echo "  ${LOCK} $project_name"
-                ((project_count++))
-            fi
-        done
-    fi
-    [ $project_count -eq 0 ] && echo "  (none)"
-    
-    # Show published content
-    echo ""
-    echo -e "${GREEN}📰 Published Content:${NC}"
-    if [ -d "published" ]; then
-        for dir in published/*/; do
-            if [ -d "$dir" ]; then
-                local content_type=$(basename "$dir")
-                echo "  📄 $content_type"
-                ((published_count++))
-            fi
-        done
-    fi
-    [ $published_count -eq 0 ] && echo "  (none)"
-    
-    # Show git status
-    echo ""
-    echo -e "${YELLOW}📝 Local Changes:${NC}"
-    if git status --porcelain 2>/dev/null | grep -q .; then
-        git status --short
-    else
-        echo "  ✅ No uncommitted changes"
-    fi
-    
-    # Show last sync
-    echo ""
-    local last_commit=$(git log -1 --format='%cr' 2>/dev/null)
-    echo -e "🕐 Last sync: ${CYAN}${last_commit:-'Unknown'}${NC}"
-    
-    # Summary
-    echo ""
-    echo -e "${BLUE}Summary: ${shared_count} shared, ${project_count} projects, ${published_count} published${NC}"
-}
-
-# =============================================================================
-# CONTRIBUTE - Contribute changes back to shared repositories
-# =============================================================================
-
-cmd_contribute() {
-    local repo_path=$1
-    local commit_message=$2
-    
-    if [ -z "$repo_path" ]; then
-        log_info "Available repositories to contribute to:"
-        find . -path "./.*" -prune -o -type d -name "*" -print | grep -E "(shared|projects|published)" | sed 's|^\./||' | sort
+        # Repository counts
+        local private_repo=$(jq -r '.repositories.private // empty' "$CONFIG_FILE")
+        local shared_repo=$(jq -r '.repositories.shared // empty' "$CONFIG_FILE")
+        local project_count=$(jq -r '.repositories.projects | length' "$CONFIG_FILE" 2>/dev/null || echo 0)
+        
         echo ""
-        read -p "Enter repository path: " repo_path
-    fi
-    
-    if [ -z "$commit_message" ]; then
-        read -p "Enter commit message: " commit_message
-    fi
-    
-    # Validate path exists
-    if [ ! -d "$repo_path" ]; then
-        log_error "Path does not exist: $repo_path"
-        return 1
-    fi
-    
-    # Determine repository name from path
-    local repo_name=""
-    case $repo_path in
-        shared/templates*)
-            repo_name="stag-shared-templates"
-            ;;
-        shared/methodologies*)
-            repo_name="stag-shared-methodologies"
-            ;;
-        shared/research*)
-            repo_name="stag-shared-research"
-            ;;
-        published/whitepapers*)
-            repo_name="stag-published-whitepapers"
-            ;;
-        projects/*)
-            local project_name=$(echo "$repo_path" | cut -d'/' -f2)
-            repo_name="stag-client-${project_name}"
-            ;;
-        *)
-            log_error "Unknown repository path: $repo_path"
-            return 1
-            ;;
-    esac
-    
-    log_step "Contributing to ${repo_name}..."
-    log_info "${CONTRIBUTE} Message: ${commit_message}"
-    
-    # Check for changes in the path
-    if ! git diff --quiet "$repo_path" || ! git diff --cached --quiet "$repo_path"; then
-        # Commit changes locally first
-        git add "$repo_path"
-        git commit -m "${commit_message}"
+        echo -e "${PURPLE}📊 Repository Summary:${NC}"
+        echo -e "  🔒 Private: $([ -n "$private_repo" ] && echo "✓ $private_repo" || echo "❌ Not found")"
+        echo -e "  📚 Shared: $([ -n "$shared_repo" ] && echo "✓ $shared_repo" || echo "❌ Not found")"
+        echo -e "  📁 Projects: $project_count active"
         
-        # Push changes back to shared repository
-        if git subtree push --prefix="$repo_path" "git@github.com:${STAG_ORG}/${repo_name}.git" main; then
-            log_success "Successfully contributed to ${repo_name}"
+        if [ "$project_count" -gt 0 ]; then
+            echo ""
+            echo -e "${GREEN}📁 Active Projects:${NC}"
+            jq -r '.repositories.projects[]?' "$CONFIG_FILE" 2>/dev/null | while read project_repo; do
+                if [ -n "$project_repo" ]; then
+                    local project_name=$(echo "$project_repo" | sed 's/^stag-project-//')
+                    echo -e "  ${LOCK} $project_name"
+                fi
+            done
+        fi
+    else
+        echo -e "  ${WARNING} No configuration found - run ./stag.sh to initialize"
+    fi
+    
+    # Local status
+    echo ""
+    echo -e "${YELLOW}📝 Local Status:${NC}"
+    if [ -d "$DOCS_DIR" ]; then
+        cd "$DOCS_DIR"
+        if git status --porcelain 2>/dev/null | grep -q .; then
+            echo -e "  ${INFO} Uncommitted changes detected"
+            git status --short | head -5
+            local change_count=$(git status --porcelain | wc -l)
+            if [ "$change_count" -gt 5 ]; then
+                echo -e "  ${INFO} ... and $((change_count - 5)) more files"
+            fi
         else
-            log_error "Failed to contribute - check permissions and try again"
+            echo -e "  ✅ All changes synchronized"
         fi
+        cd ..
     else
-        log_warning "No changes detected in $repo_path"
+        echo -e "  ${WARNING} Documentation directory not found"
     fi
 }
 
 # =============================================================================
-# ADD-PERMISSION - Grant repository access to team member
+# HELP AND VERSION
 # =============================================================================
 
-cmd_add_permission() {
-    local repo_name=$1
-    local username=$2
-    local permission=${3:-"push"}  # Default to push access
-    
-    if [ -z "$repo_name" ]; then
-        log_info "Available repositories:"
-        echo "  Client Projects:"
-        echo "    • stag-client-alpha-strategy"
-        echo "    • stag-client-beta-digital"
-        echo "  Shared Assets:"
-        echo "    • stag-shared-templates"
-        echo "    • stag-shared-methodologies"
-        echo ""
-        read -p "Enter repository name: " repo_name
-    fi
-    
-    if [ -z "$username" ]; then
-        log_info "STAG team members:"
-        echo "  • saurabh    • hemesh     • nischal    • karteek"
-        echo "  • pankaj     • rahul      • ashutosh"
-        echo ""
-        read -p "Enter GitHub username: " username
-    fi
-    
-    # Validate permission level
-    case $permission in
-        pull|push|admin)
-            ;;
-        read)
-            permission="pull"
-            ;;
-        write)
-            permission="push"
-            ;;
-        *)
-            log_error "Invalid permission: $permission"
-            log_info "Valid permissions: pull, push, admin (or read, write)"
-            return 1
-            ;;
-    esac
-    
-    log_step "Granting ${permission} access to ${username} for ${repo_name}..."
-    
-    # Check if GitHub CLI is available
-    if ! command -v gh &> /dev/null; then
-        log_error "GitHub CLI (gh) not found. Please install it first."
-        log_info "Alternative: Add collaborator manually on GitHub"
-        return 1
-    fi
-    
-    # Add collaborator using GitHub CLI
-    if gh repo create "${STAG_ORG}/${repo_name}" --private 2>/dev/null; then
-        log_info "Repository already exists, adding collaborator..."
-    fi
-    
-    if gh api repos/"${STAG_ORG}"/"${repo_name}"/collaborators/"${username}" -X PUT -f permission="${permission}"; then
-        log_success "Successfully granted ${permission} access to ${username}"
-        log_info "${LOCK} ${username} can now access ${repo_name}"
-        
-        # Show what the user should do next
-        echo ""
-        log_info "📧 ${username} should now:"
-        echo "  1. Run: ./stag.sh add-project ${repo_name}"
-        echo "  2. Or add to existing setup: git subtree add --prefix=projects/[name] git@github.com:${STAG_ORG}/${repo_name}.git main --squash"
-    else
-        log_error "Failed to add collaborator"
-        log_info "Check if repository exists and you have admin access"
-    fi
+show_help() {
+    echo -e "${BLUE}STAG Auto-Sync Documentation Tool v${SCRIPT_VERSION}${NC}"
+    echo -e "${PURPLE}Strategy and Technology Advisory Group${NC}"
+    echo ""
+    echo -e "${CYAN}USAGE:${NC}"
+    echo "  ./stag.sh              Auto-discover and sync all repositories"
+    echo "  ./stag.sh status       Show current status and configuration"
+    echo "  ./stag.sh discover     Force repository discovery (refresh cache)"
+    echo "  ./stag.sh help         Show this help message"
+    echo "  ./stag.sh version      Show version information"
+    echo ""
+    echo -e "${CYAN}HOW IT WORKS:${NC}"
+    echo "  1. ${DISCOVER} Discovers your accessible STAG repositories"
+    echo "  2. ${CREATE} Creates your private repository if needed"
+    echo "  3. ${SYNC} Bidirectionally syncs all content"
+    echo "  4. ${SUCCESS} Shows detailed sync report"
+    echo ""
+    echo -e "${CYAN}REPOSITORY STRUCTURE:${NC}"
+    echo "  📁 _docs/private/      - Your personal methodologies (stag-private-[name])"
+    echo "  📁 _docs/shared/       - Team resources (stag-shared)"
+    echo "  📁 _docs/projects/     - Client projects (stag-project-[name])"
+    echo ""
+    echo -e "${CYAN}GETTING STARTED:${NC}"
+    echo "  1. Run: ./stag.sh"
+    echo "  2. Start creating content in _docs/ folders"
+    echo "  3. Run: ./stag.sh periodically to stay synced"
+    echo ""
+    echo -e "${CYAN}CONFIGURATION:${NC}"
+    echo "  • Uses git config user.name for consultant identification"
+    echo "  • Caches repository list for 1 hour (.stag-config.json)"
+    echo "  • Auto-resolves merge conflicts"
+}
+
+show_version() {
+    echo "STAG Auto-Sync Documentation Tool v${SCRIPT_VERSION}"
 }
 
 # =============================================================================
-# LIST-PERMISSIONS - Show repository collaborators and permissions
-# =============================================================================
-
-cmd_list_permissions() {
-    local repo_name=$1
-    
-    if [ -z "$repo_name" ]; then
-        log_info "Enter repository name to check permissions:"
-        read -p "Repository name: " repo_name
-    fi
-    
-    # Check if GitHub CLI is available
-    if ! command -v gh &> /dev/null; then
-        log_error "GitHub CLI (gh) not found. Please install it first."
-        return 1
-    fi
-    
-    log_step "Checking permissions for ${repo_name}..."
-    
-    # Get collaborators
-    if gh api repos/"${STAG_ORG}"/"${repo_name}"/collaborators --jq '.[] | [.login, .permissions.admin, .permissions.push, .permissions.pull] | @tsv' > /tmp/stag_permissions.txt 2>/dev/null; then
-        echo ""
-        echo -e "${BLUE}👥 Repository Access: ${repo_name}${NC}"
-        echo "======================================"
-        
-        while IFS=
-
-# =============================================================================
-# CREATE-PROJECT - Create new client project repository
-# =============================================================================
-
-cmd_create_project() {
-    local client_name=$1
-    local project_type=${2:-"strategy"}
-    
-    if [ -z "$client_name" ]; then
-        read -p "Enter client name (e.g., alpha, beta): " client_name
-    fi
-    
-    local repo_name="stag-client-${client_name}-${project_type}"
-    local local_path="projects/${client_name}-${project_type}"
-    
-    log_step "Creating new client project repository..."
-    log_info "📋 Repository: ${repo_name}"
-    log_info "${FOLDER} Local path: ${local_path}"
-    
-    # Check if GitHub CLI is available
-    if ! command -v gh &> /dev/null; then
-        log_error "GitHub CLI (gh) not found. Please install it first."
-        log_info "Alternative: Create repository manually on GitHub, then use 'stag.sh add-project'"
-        return 1
-    fi
-    
-    # Create repository on GitHub
-    log_info "${CONTRIBUTE} Creating repository on GitHub..."
-    if gh repo create "${STAG_ORG}/${repo_name}" --private --description "STAG client project: ${client_name} ${project_type}"; then
-        log_success "Repository created on GitHub"
-        
-        # Initialize local project structure
-        mkdir -p "${local_path}"
-        cd "${local_path}"
-        
-        # Create project structure
-        mkdir -p {proposal,research,presentations,deliverables}
-        
-        # Create project README
-        cat > README.md << EOF
-# ${client_name^} ${project_type^} Project
-
-**Project Type**: ${project_type^}
-**Client**: ${client_name^}  
-**Created**: $(date)
-**Team**: [Add team members]
-**Status**: Planning
-
-## Project Structure
-- [Proposal](proposal/) - Initial proposal and scope
-- [Research](research/) - Background research and analysis
-- [Presentations](presentations/) - Client presentations  
-- [Deliverables](deliverables/) - Final project deliverables
-
-## Confidentiality Notice
-${LOCK} This repository contains confidential client information.
-Access is restricted to authorized project team members only.
-
-## Team Access
-- Project Lead: [Name]
-- Technical Lead: [Name]  
-- Industry Expert: [Name]
-- Contributors: [Names]
-EOF
-        
-        # Initialize git and push
-        git init
-        git add .
-        git commit -m "Initial project structure for ${client_name} ${project_type}"
-        git branch -M main
-        git remote add origin "git@github.com:${STAG_ORG}/${repo_name}.git"
-        git push -u origin main
-        
-        cd ../..
-        
-        # Add as subtree to current repository
-        log_info "${DOWNLOAD} Adding project to your STAG docs..."
-        git subtree add --prefix="${local_path}" \
-            "git@github.com:${STAG_ORG}/${repo_name}.git" main --squash
-            
-        log_success "Client project created and added successfully!"
-        log_info "${FOLDER} Project available at: ${local_path}/"
-        log_warning "${LOCK} Remember to set up team access permissions on GitHub"
-    else
-        log_error "Failed to create repository on GitHub"
-    fi
-}
-
-# =============================================================================
-# MAIN SCRIPT LOGIC
+# MAIN FUNCTION
 # =============================================================================
 
 main() {
-    local command=$1
-    shift
+    local command=${1:-"sync"}
     
     case $command in
-        init)
-            cmd_init "$@"
+        sync|"")
+            initialize_docs
+            load_config
+            validate_and_create_projects
+            sync_all_repositories
+            show_status
             ;;
-        add-shared)
-            cmd_add_shared "$@"
-            ;;
-        add-project)
-            cmd_add_project "$@"
-            ;;
-        add-permission)
-            cmd_add_permission "$@"
-            ;;
-        list-permissions)
-            cmd_list_permissions "$@"
-            ;;
-        sync)
-            cmd_sync "$@"
+        discover)
+            log_step "Forcing repository discovery..."
+            discover_repositories
+            log_success "Repository discovery completed"
             ;;
         status)
-            cmd_status "$@"
-            ;;
-        contribute)
-            cmd_contribute "$@"
-            ;;
-        create-project)
-            cmd_create_project "$@"
+            show_status
             ;;
         help|-h|--help)
             show_help
@@ -767,181 +683,20 @@ main() {
             show_version
             ;;
         *)
-            if [ -z "$command" ]; then
-                show_help
-            else
-                log_error "Unknown command: $command"
-                echo ""
-                show_help
-                exit 1
-            fi
-            ;;
-    esac
-}
-
-# Run main function with all arguments
-main "$@"\t' read -r username admin push pull; do
-            if [ "$admin" = "true" ]; then
-                echo -e "  👑 ${CYAN}${username}${NC} - Admin (full access)"
-            elif [ "$push" = "true" ]; then
-                echo -e "  ✏️  ${GREEN}${username}${NC} - Write (can contribute)"
-            elif [ "$pull" = "true" ]; then
-                echo -e "  👁️  ${YELLOW}${username}${NC} - Read (view only)"
-            fi
-        done < /tmp/stag_permissions.txt
-        
-        rm -f /tmp/stag_permissions.txt
-        echo ""
-        
-        # Show repository type warning
-        if [[ "$repo_name" == *"client"* ]]; then
-            log_warning "${LOCK} Client project - confidential information"
-        fi
-    else
-        log_error "Failed to retrieve permissions"
-        log_info "Check if repository exists and you have access"
-    fi
-}
-
-# =============================================================================
-# CREATE-PROJECT - Create new client project repository
-# =============================================================================
-
-cmd_create_project() {
-    local client_name=$1
-    local project_type=${2:-"strategy"}
-    
-    if [ -z "$client_name" ]; then
-        read -p "Enter client name (e.g., alpha, beta): " client_name
-    fi
-    
-    local repo_name="stag-client-${client_name}-${project_type}"
-    local local_path="projects/${client_name}-${project_type}"
-    
-    log_step "Creating new client project repository..."
-    log_info "📋 Repository: ${repo_name}"
-    log_info "${FOLDER} Local path: ${local_path}"
-    
-    # Check if GitHub CLI is available
-    if ! command -v gh &> /dev/null; then
-        log_error "GitHub CLI (gh) not found. Please install it first."
-        log_info "Alternative: Create repository manually on GitHub, then use 'stag.sh add-project'"
-        return 1
-    fi
-    
-    # Create repository on GitHub
-    log_info "${CONTRIBUTE} Creating repository on GitHub..."
-    if gh repo create "${STAG_ORG}/${repo_name}" --private --description "STAG client project: ${client_name} ${project_type}"; then
-        log_success "Repository created on GitHub"
-        
-        # Initialize local project structure
-        mkdir -p "${local_path}"
-        cd "${local_path}"
-        
-        # Create project structure
-        mkdir -p {proposal,research,presentations,deliverables}
-        
-        # Create project README
-        cat > README.md << EOF
-# ${client_name^} ${project_type^} Project
-
-**Project Type**: ${project_type^}
-**Client**: ${client_name^}  
-**Created**: $(date)
-**Team**: [Add team members]
-**Status**: Planning
-
-## Project Structure
-- [Proposal](proposal/) - Initial proposal and scope
-- [Research](research/) - Background research and analysis
-- [Presentations](presentations/) - Client presentations  
-- [Deliverables](deliverables/) - Final project deliverables
-
-## Confidentiality Notice
-${LOCK} This repository contains confidential client information.
-Access is restricted to authorized project team members only.
-
-## Team Access
-- Project Lead: [Name]
-- Technical Lead: [Name]  
-- Industry Expert: [Name]
-- Contributors: [Names]
-EOF
-        
-        # Initialize git and push
-        git init
-        git add .
-        git commit -m "Initial project structure for ${client_name} ${project_type}"
-        git branch -M main
-        git remote add origin "git@github.com:${STAG_ORG}/${repo_name}.git"
-        git push -u origin main
-        
-        cd ../..
-        
-        # Add as subtree to current repository
-        log_info "${DOWNLOAD} Adding project to your STAG docs..."
-        git subtree add --prefix="${local_path}" \
-            "git@github.com:${STAG_ORG}/${repo_name}.git" main --squash
-            
-        log_success "Client project created and added successfully!"
-        log_info "${FOLDER} Project available at: ${local_path}/"
-        log_warning "${LOCK} Remember to set up team access permissions on GitHub"
-    else
-        log_error "Failed to create repository on GitHub"
-    fi
-}
-
-# =============================================================================
-# MAIN SCRIPT LOGIC
-# =============================================================================
-
-main() {
-    local command=$1
-    shift
-    
-    case $command in
-        init)
-            cmd_init "$@"
-            ;;
-        add-shared)
-            cmd_add_shared "$@"
-            ;;
-        add-project)
-            cmd_add_project "$@"
-            ;;
-        sync)
-            cmd_sync "$@"
-            ;;
-        status)
-            cmd_status "$@"
-            ;;
-        contribute)
-            cmd_contribute "$@"
-            ;;
-        serve)
-            cmd_serve "$@"
-            ;;
-        create-project)
-            cmd_create_project "$@"
-            ;;
-        help|-h|--help)
+            log_error "Unknown command: $command"
+            echo ""
             show_help
-            ;;
-        version|-v|--version)
-            show_version
-            ;;
-        *)
-            if [ -z "$command" ]; then
-                show_help
-            else
-                log_error "Unknown command: $command"
-                echo ""
-                show_help
-                exit 1
-            fi
+            exit 1
             ;;
     esac
 }
 
-# Run main function with all arguments
+# Ensure jq is available
+if ! command -v jq &> /dev/null; then
+    log_error "jq is required but not installed. Please install jq first."
+    log_info "Install: https://stedolan.github.io/jq/download/"
+    exit 1
+fi
+
+# Run main function
 main "$@"

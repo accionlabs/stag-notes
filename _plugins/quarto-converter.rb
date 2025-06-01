@@ -4,14 +4,12 @@ require 'yaml'
 require 'json'
 require 'securerandom'
 require 'pathname'
+require 'set'
 
 module Jekyll
   class QuartoConverter < Converter
     safe true
     priority :normal
-    
-    # Initialize class variable
-    @@current_qmd_document = nil
     
     def initialize(config = {})
       super(config)
@@ -31,12 +29,36 @@ module Jekyll
     end
 
     def convert(content)
-      # Get export formats from the current document being processed
+      Jekyll.logger.info "Quarto", "Convert method called"
+      
+      # Try to get the document from the site context
+      site = Jekyll.sites.first
+      current_doc = nil
       export_formats = []
-      if @@current_qmd_document
-        export_formats = @@current_qmd_document.data['quarto_exports'] || []
-        @current_document_path = @@current_qmd_document.path
-        Jekyll.logger.info "Quarto", "Processing: #{File.basename(@current_document_path)} with exports: #{export_formats.inspect}" if export_formats.any?
+      
+      if site
+        # Search through all documents to find the current one
+        all_docs = site.collections.values.flat_map(&:docs)
+        current_doc = all_docs.find { |doc| doc.extname == '.qmd' && doc.content == content }
+        
+        if current_doc
+          @current_document_path = current_doc.path
+          export_formats = current_doc.data['quarto_exports'] || []
+          Jekyll.logger.info "Quarto", "Found document: #{File.basename(@current_document_path)} with exports: #{export_formats.inspect}"
+        else
+          Jekyll.logger.warn "Quarto", "Could not find current document in site.collections"
+        end
+      end
+      
+      # Fallback: try to extract exports from frontmatter in content
+      if export_formats.empty? && content =~ /^---\s*\n(.*?)\n---\s*\n/m
+        begin
+          frontmatter = YAML.load($1)
+          export_formats = frontmatter['quarto_exports'] || []
+          Jekyll.logger.info "Quarto", "Extracted exports from content frontmatter: #{export_formats.inspect}"
+        rescue => e
+          Jekyll.logger.warn "Quarto", "Failed to parse frontmatter: #{e.message}"
+        end
       end
       
       if @quarto_available
@@ -45,14 +67,6 @@ module Jekyll
         Jekyll.logger.warn "Quarto", "Quarto not found, falling back to markdown processing"
         render_as_markdown(content)
       end
-    end
-
-    def current_document_path=(path)
-      @current_document_path = path
-    end
-    
-    def current_document_path
-      @current_document_path
     end
 
     private
@@ -64,13 +78,15 @@ module Jekyll
     end
 
     def render_with_quarto(content, export_formats = [])
-      # Include export formats in cache key so cache is invalidated when exports change
-      content_with_exports = content + export_formats.to_s
-      content_hash = Digest::SHA256.hexdigest(content_with_exports)
+      # Only generate exports if they don't already exist or if content has changed
+      should_generate_exports = export_formats.any? && needs_export_generation?(content, export_formats)
+      
+      # Use cache for HTML generation
+      content_hash = Digest::SHA256.hexdigest(content)
       cache_file = File.join(@cache_dir, "#{content_hash}.html")
       metadata_file = File.join(@cache_dir, "#{content_hash}.meta.json")
 
-      if File.exist?(cache_file) && File.exist?(metadata_file) && export_formats.empty?
+      if File.exist?(cache_file) && File.exist?(metadata_file) && !should_generate_exports
         Jekyll.logger.debug "Quarto", "Using cached output"
         return File.read(cache_file)
       end
@@ -78,7 +94,7 @@ module Jekyll
       Jekyll.logger.info "Quarto", "Rendering #{File.basename(@current_document_path || 'document')}"
       
       begin
-        rendered_content = execute_quarto_render(content, export_formats)
+        rendered_content = execute_quarto_render(content, should_generate_exports ? export_formats : [])
         
         File.write(cache_file, rendered_content)
         File.write(metadata_file, {
@@ -89,7 +105,20 @@ module Jekyll
         rendered_content
       rescue => e
         Jekyll.logger.error "Quarto", "Failed to render with Quarto: #{e.message}"
+        Jekyll.logger.error "Quarto", e.backtrace.join("\n")
         render_as_markdown(content)
+      end
+    end
+
+    def needs_export_generation?(content, export_formats)
+      return false if export_formats.empty? || !@current_document_path
+      
+      # Check if export files exist and are newer than the source
+      source_mtime = File.mtime(@current_document_path)
+      
+      export_formats.any? do |format|
+        export_file = @current_document_path.sub(/\.qmd$/, ".#{format}")
+        !File.exist?(export_file) || File.mtime(export_file) < source_mtime
       end
     end
 
@@ -106,16 +135,25 @@ module Jekyll
           content = update_image_references(content)
         end
         
-        File.write(temp_file, content)
+        # Preprocess content to support both standard markdown and Quarto syntaxes
+        processed_content = preprocess_executable_blocks(content)
+        
+        File.write(temp_file, processed_content)
         
         # Render HTML first
         original_dir = Dir.pwd
         Dir.chdir(temp_dir)
         
+        Jekyll.logger.info "Quarto", "Executing: quarto render document.qmd --to html"
         success = system("quarto render document.qmd --to html > /dev/null 2>&1")
         
         if success && export_formats.any?
+          Jekyll.logger.info "Quarto", "HTML render successful, generating exports: #{export_formats.inspect}"
           generate_exports(temp_dir, export_formats)
+        elsif !success
+          Jekyll.logger.error "Quarto", "HTML render failed"
+        elsif export_formats.empty?
+          Jekyll.logger.debug "Quarto", "No export formats specified"
         end
         
         Dir.chdir(original_dir)
@@ -138,11 +176,16 @@ module Jekyll
       formats.each do |format|
         Jekyll.logger.info "Quarto", "Generating #{format} export"
         
-        success = system("quarto render document.qmd --to #{format} > /dev/null 2>&1")
+        # Run quarto with output visible for debugging
+        cmd = "quarto render document.qmd --to #{format}"
+        Jekyll.logger.info "Quarto", "Executing: #{cmd}"
+        
+        success = system(cmd)
         
         if success
           # Look for files with the expected extension
           export_files = Dir.glob("document.#{format}")
+          Jekyll.logger.info "Quarto", "Found export files: #{export_files.inspect}"
           
           # Copy files to source directory
           export_files.each do |file|
@@ -151,17 +194,25 @@ module Jekyll
               basename = File.basename(@current_document_path, '.qmd')
               dest_file = File.join(source_dir, "#{basename}.#{format}")
               
+              Jekyll.logger.info "Quarto", "Copying #{file} to #{dest_file}"
+              
               begin
                 FileUtils.cp(file, dest_file)
                 file_size = File.size(dest_file)
                 Jekyll.logger.info "Quarto", "✓ Export created: #{basename}.#{format} (#{file_size} bytes)"
+                
+                # Touch the source file's mtime to be older than export
+                # This prevents the export from triggering regeneration
+                FileUtils.touch(dest_file, mtime: Time.now + 1)
               rescue => e
                 Jekyll.logger.error "Quarto", "Error copying export: #{e.message}"
               end
+            else
+              Jekyll.logger.warn "Quarto", "No current document path available for export copy"
             end
           end
         else
-          Jekyll.logger.warn "Quarto", "Failed to generate #{format} export"
+          Jekyll.logger.error "Quarto", "Failed to generate #{format} export"
         end
       end
     end
@@ -231,6 +282,69 @@ module Jekyll
       end
     end
 
+    def preprocess_mermaid_blocks(content)
+      # Convert standard markdown mermaid blocks to Quarto syntax
+      # This regex looks for ```mermaid blocks (without {})
+      content.gsub(/^```mermaid\s*$/m, '```{mermaid}')
+    end
+
+    def preprocess_executable_blocks(content)
+      # List of executable block types that Quarto supports
+      # These are diagram/visualization formats that need the {type} syntax
+      executable_types = [
+        'mermaid',      # Flow charts and diagrams
+        'dot',          # Graphviz diagrams
+        'plantuml',     # PlantUML diagrams
+        'ditaa',        # ASCII art diagrams
+        'd2',           # D2 diagrams
+        'kroki',        # Kroki diagram gateway
+        'tikz',         # TikZ diagrams
+        'asymptote',    # Asymptote diagrams
+        'metapost',     # MetaPost diagrams
+        'xy-pic',       # XY-pic diagrams
+        'quarto',       # Quarto-specific blocks
+        'observable',   # Observable JS
+        'ojs',          # Observable JS shorthand
+        'python',       # Python code blocks (when executable)
+        'r',            # R code blocks (when executable)
+        'julia',        # Julia code blocks (when executable)
+        'sql',          # SQL code blocks (when executable)
+        'bash',         # Bash/shell scripts (when executable)
+        'sh',           # Shell scripts (when executable)
+      ]
+      
+      # Create a regex pattern for all supported types
+      pattern = executable_types.join('|')
+      
+      # Convert standard markdown blocks to Quarto executable syntax
+      # This handles blocks like ```mermaid to ```{mermaid}
+      processed = content.gsub(/^```(#{pattern})(\s*\n)/m) do |match|
+        type = $1
+        newline = $2
+        
+        # Check if it already has Quarto syntax
+        if match =~ /^```\{#{type}\}/
+          match  # Already in Quarto format, leave as-is
+        else
+          # For code blocks (python, r, julia, etc.), only convert if they have execution hints
+          if ['python', 'r', 'julia', 'sql', 'bash', 'sh'].include?(type)
+            # Look ahead to see if this block has execution markers like #| echo: true
+            next_lines = content[content.index(match)..-1].split("\n")[1..5].join("\n")
+            if next_lines =~ /#\|/ || content[content.index(match)-50..content.index(match)] =~ /execute|eval|echo|output/i
+              "```{#{type}}#{newline}"
+            else
+              match  # Regular code block, don't convert
+            end
+          else
+            # Diagram/visualization blocks always get converted
+            "```{#{type}}#{newline}"
+          end
+        end
+      end
+      
+      processed
+    end
+
     def extract_body_content(html)
       if html.include?('<body')
         body_start = html.index(/<body[^>]*>/) 
@@ -254,24 +368,42 @@ module Jekyll
     end
   end
 
-  # Global storage for current document being processed
-  @@current_qmd_document = nil
-
-  Jekyll::Hooks.register :documents, :pre_render do |document|
-    if document.extname == '.qmd'
-      @@current_qmd_document = document
-    end
-  end
-
-  Jekyll::Hooks.register :pages, :pre_render do |page|
-    if page.extname == '.qmd'
-      @@current_qmd_document = page
-    end
-  end
-
   Jekyll::Hooks.register :site, :after_init do |site|
     cache_dir = File.join(site.source, '_quarto_cache')
     clean_old_cache(cache_dir) if Dir.exist?(cache_dir)
+  end
+
+  # Hook to ensure export files are copied to _site
+  Jekyll::Hooks.register :site, :post_read do |site|
+    # Find all .qmd files and their potential exports
+    qmd_files = site.collections.values.flat_map(&:docs).select { |doc| doc.extname == '.qmd' }
+    
+    qmd_files.each do |doc|
+      if doc.data['quarto_exports']
+        doc.data['quarto_exports'].each do |format|
+          export_file = doc.path.sub(/\.qmd$/, ".#{format}")
+          
+          if File.exist?(export_file)
+            # Calculate relative path
+            relative_dir = File.dirname(doc.relative_path)
+            
+            # Create a StaticFile for the export
+            static_file = Jekyll::StaticFile.new(
+              site,
+              site.source,
+              relative_dir,
+              File.basename(export_file)
+            )
+            
+            # Add to site's static files if not already present
+            unless site.static_files.any? { |f| f.path == static_file.path }
+              site.static_files << static_file
+              Jekyll.logger.info "Quarto", "Registered export file for copying: #{File.basename(export_file)}"
+            end
+          end
+        end
+      end
+    end
   end
 
   def self.clean_old_cache(cache_dir, max_age_days = 7)

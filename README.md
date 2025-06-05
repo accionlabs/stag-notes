@@ -6,8 +6,8 @@ Repository for STAG (Strategy and Technology Advisory Group) documentation using
 
 ```bash
 # Clone the repository
-git clone git@github.com:accionlabs/stag-base-jekyll.git
-cd stag-base-jekyll
+git clone git@github.com:accionlabs/stag-notes.git
+cd stag-notes
 
 # Install dependencies
 bundle install
@@ -265,8 +265,8 @@ git config user.email "your.email@company.com"
 gh auth login
 
 # Clone and setup
-git clone git@github.com:accionlabs/stag-base-jekyll.git
-cd stag-base-jekyll
+git clone git@github.com:accionlabs/stag-notes.git
+cd stag-notes
 bundle install
 ```
 

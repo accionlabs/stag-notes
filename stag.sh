@@ -6,7 +6,7 @@
 
 # Configuration
 STAG_ORG="accionlabs"
-SCRIPT_VERSION="3.0.0"
+SCRIPT_VERSION="3.0.3"
 DOCS_DIR="_docs"
 CONFIG_FILE=".stag-config.json"
 TEAM_CONFIG_FILE=".stag-team.json"
@@ -87,7 +87,7 @@ get_consultant_name() {
 load_team_config() {
     if [ ! -f "$TEAM_CONFIG_FILE" ]; then
         log_warning "Team configuration file not found: $TEAM_CONFIG_FILE"
-        log_info "Create it with: {"team_members": {"name": "github-username", ...}}"
+        log_info "Create it with: {\"team_members\": {\"name\": \"github-username\", ...}}"
         return 1
     fi
     return 0
@@ -150,6 +150,126 @@ get_timestamp() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+is_cache_valid() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return 1
+    fi
+    
+    local last_scan=$(jq -r '.last_scan // empty' "$CONFIG_FILE" 2>/dev/null)
+    if [ -z "$last_scan" ]; then
+        return 1
+    fi
+    
+    local last_epoch=$(date -d "$last_scan" +%s 2>/dev/null || echo 0)
+    local current_epoch=$(date +%s)
+    local age=$((current_epoch - last_epoch))
+    
+    [ $age -lt $CACHE_DURATION ]
+}
+
+# =============================================================================
+# PROJECT VALIDATION AND CREATION
+# =============================================================================
+
+validate_and_create_projects() {
+    if [ ! -d "$DOCS_DIR/projects" ]; then
+        return 0
+    fi
+    
+    log_step "Validating project configurations..."
+    
+    local projects_created=()
+    
+    # Find all project directories
+    for project_dir in "$DOCS_DIR/projects"/*; do
+        if [ -d "$project_dir" ]; then
+            local project_name=$(basename "$project_dir")
+            local index_file="$project_dir/index.md"
+            
+            if [ ! -f "$index_file" ]; then
+                log_warning "Project '$project_name' missing index.md - skipping"
+                continue
+            fi
+            
+            # Extract front matter
+            local front_matter=$(awk '/^---$/{if(++n==2) exit} n>=1' "$index_file")
+            
+            if [ -z "$front_matter" ]; then
+                log_warning "Project '$project_name' has invalid index.md (no front matter) - skipping"
+                continue
+            fi
+            
+            # Parse team information from front matter
+            local lead=$(echo "$front_matter" | grep "^lead:" | sed 's/lead: *//; s/["]//g' | tr -d '"' | xargs)
+            local team_raw=$(echo "$front_matter" | grep "^team:" | sed 's/team: *//')
+            
+            # Convert team to JSON array if it's in YAML format
+            local team_json="[]"
+            if [ -n "$team_raw" ]; then
+                # Handle both formats: team: ["user1", "user2"] and team: [user1, user2]
+                team_json=$(echo "$team_raw" | sed 's/\[/["/; s/\]/"]/' | sed 's/, */", "/g' | sed 's/\["/["/; s/"\]/"]/')
+                # Validate it's proper JSON
+                if ! echo "$team_json" | jq . >/dev/null 2>&1; then
+                    team_json="[]"
+                fi
+            fi
+            
+            # Validate team members
+            if ! validate_team_members "$team_json" "$lead" "$project_name"; then
+                log_error "Skipping project '$project_name' due to validation errors"
+                continue
+            fi
+            
+            # Sync project permissions
+            if sync_project_permissions "$project_name"; then
+                projects_created+=("stag-project-$project_name")
+            fi
+        fi
+    done
+    
+    # Update config file with newly created projects
+    if [ ${#projects_created[@]} -gt 0 ]; then
+        log_info "Updating configuration with newly created projects..."
+        
+        # Read current config
+        local current_projects=($(jq -r '.repositories.projects[]? // empty' "$CONFIG_FILE" 2>/dev/null))
+        
+        # Add new projects to the list
+        for new_project in "${projects_created[@]}"; do
+            local found=false
+            for existing in "${current_projects[@]}"; do
+                if [ "$existing" = "$new_project" ]; then
+                    found=true
+                    break
+                fi
+            done
+            if [ "$found" = false ]; then
+                current_projects+=("$new_project")
+            fi
+        done
+        
+        # Update config file
+        local consultant=$(jq -r '.consultant' "$CONFIG_FILE")
+        local shared_repo=$(jq -r '.repositories.shared // empty' "$CONFIG_FILE")
+        
+        local config=$(jq -n \
+            --arg consultant "$consultant" \
+            --arg timestamp "$(get_timestamp)" \
+            --arg shared "$shared_repo" \
+            --argjson projects "$(printf '%s\n' "${current_projects[@]}" | jq -R . | jq -s .)" \
+            '{
+                consultant: $consultant,
+                last_scan: $timestamp,
+                repositories: {
+                    shared: ($shared | select(. != "")),
+                    projects: $projects
+                }
+            }')
+        
+        echo "$config" > "$CONFIG_FILE"
+    fi
+}
+
 sync_project_permissions() {
     local project_name=$1
     local repo_name="stag-project-$project_name"
@@ -157,7 +277,7 @@ sync_project_permissions() {
     
     if [ ! -f "$index_file" ]; then
         log_warning "No index.md found for project: $project_name"
-        return 0
+        return 1
     fi
     
     # Extract front matter using awk
@@ -165,7 +285,7 @@ sync_project_permissions() {
     
     if [ -z "$front_matter" ]; then
         log_warning "No front matter found in $project_name/index.md"
-        return 0
+        return 1
     fi
     
     # Parse team information from front matter
@@ -192,12 +312,6 @@ sync_project_permissions() {
         log_info "  Team: $team_display"
     fi
     
-    # Validate team members exist in configuration
-    if ! validate_team_members "$team_json" "$lead" "$project_name"; then
-        log_error "Team validation failed for project: $project_name"
-        return 1
-    fi
-    
     # Check if repository exists
     if ! gh repo view "$STAG_ORG/$repo_name" >/dev/null 2>&1; then
         log_create "Creating repository: $repo_name"
@@ -206,24 +320,8 @@ sync_project_permissions() {
             return 1
         fi
         
-        # Initialize repository with basic structure
-        local temp_dir=$(mktemp -d)
-        cd "$temp_dir"
-        git clone "git@github.com:$STAG_ORG/$repo_name.git"
-        cd "$repo_name"
-        
-        mkdir -p proposal research presentations deliverables
-        echo "# $project_name Project" > README.md
-        echo "" >> README.md
-        echo "This repository was auto-created by STAG system." >> README.md
-        echo "The team configuration is managed via the index.md file." >> README.md
-        
-        git add .
-        git commit -m "Initial repository structure"
-        git push
-        
-        cd ../../..
-        rm -rf "$temp_dir"
+        # Push existing local content
+        push_local_content_to_new_repo "$DOCS_DIR/projects/$project_name" "$repo_name"
     fi
     
     # Set lead permissions (admin)
@@ -255,21 +353,50 @@ sync_project_permissions() {
     return 0
 }
 
-is_cache_valid() {
-    if [ ! -f "$CONFIG_FILE" ]; then
-        return 1
+# =============================================================================
+# Push local content to newly created repository
+# =============================================================================
+
+push_local_content_to_new_repo() {
+    local local_path=$1
+    local repo_name=$2
+    local repo_url="git@github.com:$STAG_ORG/$repo_name.git"
+    
+    log_info "Pushing existing local content to new repository..."
+    
+    cd "$local_path"
+    
+    # Initialize git if not already initialized
+    if [ ! -d ".git" ]; then
+        git init >/dev/null 2>&1
     fi
     
-    local last_scan=$(jq -r '.last_scan // empty' "$CONFIG_FILE" 2>/dev/null)
-    if [ -z "$last_scan" ]; then
-        return 1
+    # Add remote if not already added
+    if ! git remote get-url origin >/dev/null 2>&1; then
+        git remote add origin "$repo_url"
+    else
+        git remote set-url origin "$repo_url"
     fi
     
-    local last_epoch=$(date -d "$last_scan" +%s 2>/dev/null || echo 0)
-    local current_epoch=$(date +%s)
-    local age=$((current_epoch - last_epoch))
+    # Add all files
+    git add -A >/dev/null 2>&1
     
-    [ $age -lt $CACHE_DURATION ]
+    # Commit if there are changes
+    if [ "$(git status --porcelain)" ]; then
+        git commit -m "Initial commit: Local project content" >/dev/null 2>&1
+    fi
+    
+    # Create main branch if it doesn't exist
+    git branch -M main >/dev/null 2>&1
+    
+    # Push to remote
+    if git push -u origin main -f >/dev/null 2>&1; then
+        log_success "Successfully pushed local content to repository"
+    else
+        log_warning "Failed to push local content - will retry on next sync"
+    fi
+    
+    cd - >/dev/null
 }
 
 # =============================================================================
@@ -289,23 +416,11 @@ discover_repositories() {
     fi
     
     # Initialize repository lists
-    local private_repo="stag-private-$consultant"
     local shared_repo="stag-shared"
     local projects=()
     
-    # Check if private repository exists, create if not
-    log_discover "Checking private repository: $private_repo"
-    if ! gh repo view "$STAG_ORG/$private_repo" >/dev/null 2>&1; then
-        log_create "Creating private repository: $private_repo"
-        if gh repo create "$STAG_ORG/$private_repo" --private --description "STAG private documentation for $consultant"; then
-            log_success "Private repository created"
-        else
-            log_error "Failed to create private repository"
-            return 1
-        fi
-    else
-        log_info "Private repository found"
-    fi
+    # Private folder is local-only, no repository
+    log_info "Private folder is local-only (not synced to GitHub)"
     
     # Check shared repository
     log_discover "Checking shared repository: $shared_repo"
@@ -331,18 +446,16 @@ discover_repositories() {
         fi
     done
     
-    # Create configuration
+    # Create configuration (no private repo)
     local config=$(jq -n \
         --arg consultant "$consultant" \
         --arg timestamp "$(get_timestamp)" \
-        --arg private "$private_repo" \
         --arg shared "$shared_repo" \
         --argjson projects "$(printf '%s\n' "${projects[@]}" | jq -R . | jq -s .)" \
         '{
             consultant: $consultant,
             last_scan: $timestamp,
             repositories: {
-                private: $private,
                 shared: ($shared | select(. != "")),
                 projects: $projects
             }
@@ -351,7 +464,7 @@ discover_repositories() {
     echo "$config" > "$CONFIG_FILE"
     
     log_success "Repository discovery completed"
-    log_info "Found: 1 private, $([ -n "$shared_repo" ] && echo "1" || echo "0") shared, ${#projects[@]} projects"
+    log_info "Found: $([ -n "$shared_repo" ] && echo "1" || echo "0") shared, ${#projects[@]} projects"
     
     return 0
 }
@@ -381,9 +494,6 @@ initialize_docs() {
     # Create main docs directory if it doesn't exist
     if [ ! -d "$DOCS_DIR" ]; then
         mkdir -p "$DOCS_DIR"
-        cd "$DOCS_DIR"
-        git init
-        cd ..
         log_create "Created documentation directory"
     fi
     
@@ -405,13 +515,15 @@ date: $(date +%Y-%m-%d)
 
 ## Quick Navigation
 
-- [Private Notes](private/) - Personal methodologies and insights
+- [Private Notes](private/) - Personal notes and methodologies (local-only)
 - [Shared Resources](shared/) - STAG team resources
 - [Active Projects](projects/) - Client work and engagements
 
 ## Usage
 
-Run \`./stag.sh\` to automatically sync all repositories.
+Run \`./stag.sh\` to automatically sync shared and project repositories.
+
+**Note**: The private folder is local-only and not synced to GitHub.
 
 ## Last Updated
 $(date)
@@ -427,13 +539,23 @@ EOF
         cat > "$DOCS_DIR/private/README.md" << EOF
 ---
 title: "Private Documentation"
-description: "Personal methodologies and confidential notes"
+description: "Personal notes and confidential information (local-only)"
 date: $(date +%Y-%m-%d)
 ---
 
 # Private Documentation
 
-This folder contains your personal consulting methodologies and frameworks.
+This folder contains your personal notes and confidential information.
+
+## ⚠️ Important
+
+**This folder is local-only and NOT synced to GitHub.**
+
+Feel free to store:
+- Personal methodologies and frameworks
+- Confidential client notes
+- Sensitive information
+- Draft ideas and experiments
 
 ## Organization
 
@@ -441,22 +563,40 @@ Create folders and files as needed:
 - **methodologies/** - Your unique approaches and techniques
 - **insights/** - Industry insights and observations  
 - **client-notes/** - Confidential client relationship notes
+- **drafts/** - Work in progress
 
-## Getting Started
+## Security
 
-- Document your unique approaches and techniques
-- Keep client-specific insights confidential
-- Changes are automatically synced to your private repository
+Since this folder is not synced to any remote repository:
+- Your content stays completely private
+- No risk of accidental exposure
+- Perfect for sensitive information
+
+Remember to backup important content independently!
 EOF
         log_create "Created private documentation structure"
+    fi
+    
+    # Create .gitignore in private folder to be extra safe
+    if [ ! -f "$DOCS_DIR/private/.gitignore" ]; then
+        cat > "$DOCS_DIR/private/.gitignore" << EOF
+# This folder is local-only
+# Adding .gitignore as extra protection
+*
+!.gitignore
+!README.md
+EOF
+        log_create "Added .gitignore to private folder for extra protection"
     fi
     
     log_success "Documentation structure initialized"
 }
 
 # =============================================================================
-# REPOSITORY SYNCHRONIZATION
+# IMPROVED REPOSITORY SYNCHRONIZATION
 # =============================================================================
+
+# Replace the sync_repository function in your stag.sh with this improved version:
 
 sync_repository() {
     local repo_type=$1
@@ -469,51 +609,153 @@ sync_repository() {
     
     local repo_url="git@github.com:$STAG_ORG/$repo_name.git"
     
-    cd "$DOCS_DIR"
+    # Check if repository exists on remote
+    if ! gh repo view "$STAG_ORG/$repo_name" >/dev/null 2>&1; then
+        log_warning "Repository $repo_name does not exist on GitHub"
+        return 1
+    fi
     
-    # Check if local path exists and is a git subtree
-    if [ -d "$local_path" ]; then
-        # Try to sync existing subtree
-        echo -n "${SYNC} Syncing $repo_type ($repo_name)... "
-        
-        # Pull changes from remote
-        if git subtree pull --prefix="$local_path" "$repo_url" main --squash >/dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC}"
-        else
-            echo -e "${YELLOW}conflicts${NC}"
-            log_warning "Merge conflicts in $repo_type - attempting auto-resolve"
+    echo -n "${SYNC} Syncing $repo_type ($repo_name)... "
+    
+    # Check if local path exists and is a git repo
+    if [ ! -d "$local_path/.git" ]; then
+        # Directory exists but no git - need to handle carefully
+        if [ -d "$local_path" ] && [ "$(ls -A "$local_path" 2>/dev/null)" ]; then
+            # We have local content but no git repo
+            log_info "Local content found without git repo, setting up..."
             
-            # Auto-resolve conflicts by preferring remote changes
-            git checkout --theirs "$local_path"
-            git add "$local_path"
-            git commit -m "Auto-resolved conflicts in $repo_type" >/dev/null 2>&1
-            echo -e "  ${INFO} Auto-resolved conflicts"
-        fi
-        
-        # Push local changes if any
-        if ! git diff --quiet "$local_path" || ! git diff --cached --quiet "$local_path"; then
-            git add "$local_path"
-            git commit -m "Auto-sync: Updated $repo_type" >/dev/null 2>&1
+            # Backup local content
+            local temp_backup=$(mktemp -d)
+            cp -r "$local_path"/* "$temp_backup/" 2>/dev/null || true
+            cp -r "$local_path"/.[^.]* "$temp_backup/" 2>/dev/null || true
             
-            if git subtree push --prefix="$local_path" "$repo_url" main >/dev/null 2>&1; then
-                echo -e "  ${SUCCESS} Pushed local changes"
+            # Remove the directory and clone
+            rm -rf "$local_path"
+            if git clone "$repo_url" "$local_path" >/dev/null 2>&1; then
+                cd "$local_path"
+                
+                # Copy back the local content
+                cp -r "$temp_backup"/* . 2>/dev/null || true
+                cp -r "$temp_backup"/.[^.]* . 2>/dev/null || true
+                
+                # Check if we have new files to add
+                if [ "$(git status --porcelain)" ]; then
+                    git add -A >/dev/null 2>&1
+                    git commit -m "Add local content from $(hostname)" >/dev/null 2>&1
+                    if git push origin main >/dev/null 2>&1; then
+                        echo -e "${GREEN}✓ (cloned and pushed local content)${NC}"
+                    else
+                        echo -e "${YELLOW}⚠ (cloned, push pending)${NC}"
+                    fi
+                else
+                    echo -e "${GREEN}✓ (cloned, no new content)${NC}"
+                fi
+                
+                cd - >/dev/null
             else
-                echo -e "  ${WARNING} Failed to push local changes"
+                echo -e "${RED}✗ (clone failed)${NC}"
+                # Restore the backup
+                rm -rf "$local_path"
+                mv "$temp_backup" "$local_path"
+                return 1
+            fi
+            
+            rm -rf "$temp_backup"
+        else
+            # No local content, just clone
+            if git clone "$repo_url" "$local_path" >/dev/null 2>&1; then
+                echo -e "${GREEN}✓ (cloned)${NC}"
+            else
+                echo -e "${RED}✗ (clone failed)${NC}"
+                return 1
             fi
         fi
     else
-        # Add new subtree
-        echo -n "${SYNC} Adding $repo_type ($repo_name)... "
+        # Repository exists locally, sync it
+        cd "$local_path"
         
-        if git subtree add --prefix="$local_path" "$repo_url" main --squash >/dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC}"
-        else
-            echo -e "${RED}✗${NC}"
-            log_error "Failed to add $repo_type repository"
+        # IMPORTANT: Check for uncommitted changes FIRST
+        if [ "$(git status --porcelain)" ]; then
+            log_info "Found uncommitted changes, committing..."
+            git add -A >/dev/null 2>&1
+            git commit -m "Auto-commit: Local changes from $(hostname) - $(date +%Y-%m-%d_%H:%M:%S)" >/dev/null 2>&1
         fi
+        
+        # Ensure we're on main branch
+        local current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+        if [ "$current_branch" != "main" ]; then
+            git checkout main >/dev/null 2>&1 || git checkout -b main >/dev/null 2>&1
+        fi
+        
+        # Fetch from remote
+        git fetch origin >/dev/null 2>&1
+        
+        # Check if we have diverged from remote
+        local local_ref=$(git rev-parse HEAD 2>/dev/null || echo "none")
+        local remote_ref=$(git rev-parse origin/main 2>/dev/null || echo "none")
+        
+        if [ "$local_ref" = "$remote_ref" ]; then
+            echo -e "${GREEN}✓ (up to date)${NC}"
+        elif [ "$remote_ref" = "none" ]; then
+            # Remote has no main branch yet, push our content
+            if git push -u origin main >/dev/null 2>&1; then
+                echo -e "${GREEN}✓ (initialized remote)${NC}"
+            else
+                echo -e "${RED}✗ (push failed)${NC}"
+            fi
+        else
+            # We have diverged - need to merge
+            local commits_ahead=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "0")
+            local commits_behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")
+            
+            if [ "$commits_ahead" -eq 0 ] && [ "$commits_behind" -gt 0 ]; then
+                # Only remote has changes, fast-forward
+                if git merge origin/main --ff-only >/dev/null 2>&1; then
+                    echo -e "${GREEN}✓ (updated: $commits_behind new commits)${NC}"
+                else
+                    echo -e "${RED}✗ (merge failed)${NC}"
+                fi
+            elif [ "$commits_ahead" -gt 0 ] && [ "$commits_behind" -eq 0 ]; then
+                # Only we have changes, push them
+                if git push origin main >/dev/null 2>&1; then
+                    echo -e "${GREEN}✓ (pushed: $commits_ahead commits)${NC}"
+                else
+                    echo -e "${RED}✗ (push failed)${NC}"
+                fi
+            else
+                # Both have changes, merge then push
+                echo -e "${YELLOW}diverged${NC}"
+                log_info "Merging: $commits_ahead local, $commits_behind remote commits"
+                
+                if git merge origin/main --no-edit >/dev/null 2>&1; then
+                    echo -e "  ${SUCCESS} Merged successfully"
+                    if git push origin main >/dev/null 2>&1; then
+                        echo -e "  ${SUCCESS} Pushed merged changes"
+                    else
+                        echo -e "  ${WARNING} Push failed - will retry next sync"
+                    fi
+                else
+                    # Merge conflict - try to resolve
+                    echo -e "  ${WARNING} Merge conflict detected"
+                    git status --porcelain | grep "^UU" | awk '{print $2}' | while read conflicted_file; do
+                        echo -e "  ${INFO} Conflict in: $conflicted_file"
+                    done
+                    
+                    # Auto-resolve by taking both changes
+                    git add -A >/dev/null 2>&1
+                    git commit -m "Auto-resolved conflicts: merged both versions" >/dev/null 2>&1
+                    
+                    if git push origin main >/dev/null 2>&1; then
+                        echo -e "  ${SUCCESS} Resolved and pushed"
+                    else
+                        echo -e "  ${WARNING} Resolved but push failed"
+                    fi
+                fi
+            fi
+        fi
+        
+        cd - >/dev/null
     fi
-    
-    cd ..
 }
 
 sync_all_repositories() {
@@ -525,25 +767,22 @@ sync_all_repositories() {
     fi
     
     # Read configuration
-    local private_repo=$(jq -r '.repositories.private // empty' "$CONFIG_FILE")
     local shared_repo=$(jq -r '.repositories.shared // empty' "$CONFIG_FILE")
     local projects=($(jq -r '.repositories.projects[]? // empty' "$CONFIG_FILE"))
     
-    # Sync private repository
-    if [ -n "$private_repo" ]; then
-        sync_repository "private" "$private_repo" "private"
-    fi
+    # Note about private folder
+    log_info "Private folder is local-only and not synced to GitHub"
     
     # Sync shared repository
     if [ -n "$shared_repo" ]; then
-        sync_repository "shared" "$shared_repo" "shared"
+        sync_repository "shared" "$shared_repo" "$DOCS_DIR/shared"
     fi
     
     # Sync project repositories
     for project_repo in "${projects[@]}"; do
         if [ -n "$project_repo" ]; then
             local project_name=$(echo "$project_repo" | sed 's/^stag-project-//')
-            sync_repository "project" "$project_repo" "projects/$project_name"
+            sync_repository "project" "$project_repo" "$DOCS_DIR/projects/$project_name"
         fi
     done
     
@@ -567,13 +806,12 @@ show_status() {
         echo -e "🕐 Last scan: ${CYAN}$last_scan${NC}"
         
         # Repository counts
-        local private_repo=$(jq -r '.repositories.private // empty' "$CONFIG_FILE")
         local shared_repo=$(jq -r '.repositories.shared // empty' "$CONFIG_FILE")
         local project_count=$(jq -r '.repositories.projects | length' "$CONFIG_FILE" 2>/dev/null || echo 0)
         
         echo ""
         echo -e "${PURPLE}📊 Repository Summary:${NC}"
-        echo -e "  🔒 Private: $([ -n "$private_repo" ] && echo "✓ $private_repo" || echo "❌ Not found")"
+        echo -e "  🔒 Private: Local-only (not synced)"
         echo -e "  📚 Shared: $([ -n "$shared_repo" ] && echo "✓ $shared_repo" || echo "❌ Not found")"
         echo -e "  📁 Projects: $project_count active"
         
@@ -595,17 +833,23 @@ show_status() {
     echo ""
     echo -e "${YELLOW}📝 Local Status:${NC}"
     if [ -d "$DOCS_DIR" ]; then
-        cd "$DOCS_DIR"
-        if git status --porcelain 2>/dev/null | grep -q .; then
-            echo -e "  ${INFO} Uncommitted changes detected"
-            git status --short | head -5
-            local change_count=$(git status --porcelain | wc -l)
-            if [ "$change_count" -gt 5 ]; then
-                echo -e "  ${INFO} ... and $((change_count - 5)) more files"
-            fi
-        else
-            echo -e "  ✅ All changes synchronized"
+        # Check private folder (local-only)
+        if [ -d "$DOCS_DIR/private" ]; then
+            local private_files=$(find "$DOCS_DIR/private" -type f -name "*.md" 2>/dev/null | wc -l)
+            echo -e "  📝 Private folder: $private_files markdown files (local-only)"
         fi
+        
+        # Check synced directories
+        cd "$DOCS_DIR"
+        for dir in shared projects/*; do
+            if [ -d "$dir" ] && [ -d "$dir/.git" ]; then
+                cd "$dir"
+                if git status --porcelain 2>/dev/null | grep -q .; then
+                    echo -e "  ${INFO} Uncommitted changes in $dir"
+                fi
+                cd - >/dev/null
+            fi
+        done
         cd ..
     else
         echo -e "  ${WARNING} Documentation directory not found"
@@ -629,24 +873,26 @@ show_help() {
     echo ""
     echo -e "${CYAN}HOW IT WORKS:${NC}"
     echo "  1. ${DISCOVER} Discovers your accessible STAG repositories"
-    echo "  2. ${CREATE} Creates your private repository if needed"
-    echo "  3. ${SYNC} Bidirectionally syncs all content"
+    echo "  2. ${SYNC} Bidirectionally syncs shared and project content"
+    echo "  3. ${LOCK} Keeps private notes local-only (not synced)"
     echo "  4. ${SUCCESS} Shows detailed sync report"
     echo ""
     echo -e "${CYAN}REPOSITORY STRUCTURE:${NC}"
-    echo "  📁 _docs/private/      - Your personal methodologies (stag-private-[name])"
+    echo "  📁 _docs/private/      - Your personal notes (local-only, not synced)"
     echo "  📁 _docs/shared/       - Team resources (stag-shared)"
     echo "  📁 _docs/projects/     - Client projects (stag-project-[name])"
     echo ""
     echo -e "${CYAN}GETTING STARTED:${NC}"
     echo "  1. Run: ./stag.sh"
-    echo "  2. Start creating content in _docs/ folders"
-    echo "  3. Run: ./stag.sh periodically to stay synced"
+    echo "  2. Create private notes in _docs/private/ (stays local)"
+    echo "  3. Work on team content in _docs/shared/ and _docs/projects/"
+    echo "  4. Run: ./stag.sh periodically to stay synced"
     echo ""
     echo -e "${CYAN}CONFIGURATION:${NC}"
     echo "  • Uses git config user.name for consultant identification"
     echo "  • Caches repository list for 1 hour (.stag-config.json)"
-    echo "  • Auto-resolves merge conflicts"
+    echo "  • Auto-commits and pushes local changes"
+    echo "  • Private folder is never synced to GitHub"
 }
 
 show_version() {

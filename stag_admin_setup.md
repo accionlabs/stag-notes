@@ -47,11 +47,11 @@ The STAG system uses three types of repositories with automatic team management:
 ### Create Repository
 ```bash
 # Create the base Jekyll repository
-gh repo create accionlabs/stag-base-jekyll --private --description "STAG team base Jekyll documentation site"
+gh repo create accionlabs/stag-notes --private --description "STAG team base Jekyll documentation site"
 
 # Clone the repository
-git clone git@github.com:accionlabs/stag-base-jekyll.git
-cd stag-base-jekyll
+git clone git@github.com:accionlabs/stag-notes.git
+cd stag-notes
 
 # Copy your existing Jekyll setup files here
 # - _config.yml, Gemfile, _layouts/, _includes/, etc.
@@ -69,28 +69,30 @@ git push
 ### Set Repository Permissions
 ```bash
 # Give STAG team read access to base repository
-gh api repos/accionlabs/stag-base-jekyll/teams/stag -X PUT -f permission=pull
+gh api repos/accionlabs/stag-notes/teams/stag -X PUT -f permission=pull
 ```
 
 ## Step 3: Create Shared Repository
 
-### Create Repository Using Script
-```bash
-# Navigate to the base Jekyll repository
-cd stag-base-jekyll
-
-# Create shared repository using the new script
-./stag.sh create shared
-```
-
-### Alternative: Manual Creation
+### Create Empty Repository
 ```bash
 # Create repository manually
 gh repo create accionlabs/stag-shared --private --description "STAG team shared resources and templates"
 
-# Clone and initialize
-git clone git@github.com:accionlabs/stag-shared.git
-cd stag-shared
+# Give STAG team write access to shared repository
+gh api repos/accionlabs/stag-shared/teams/stag -X PUT -f permission=push
+```
+
+### Initialize Repository Content
+```bash
+# Navigate to base repository
+cd stag-notes
+
+# Run stag.sh to automatically link the shared repository
+./stag.sh
+
+# Now add initial content to the shared repository
+cd _docs/shared
 
 # Create structure
 mkdir -p templates methodologies research published
@@ -120,18 +122,12 @@ Team members can update shared content automatically when they sync:
 This repository is automatically synced to all STAG team members' documentation.
 EOF
 
-# Initial commit
-git add .
-git commit -m "Initial STAG shared repository structure"
-git push
-
+# Go back to main docs directory
 cd ..
-```
 
-### Set Shared Repository Permissions
-```bash
-# Give STAG team write access to shared repository
-gh api repos/accionlabs/stag-shared/teams/stag -X PUT -f permission=push
+# The content will be automatically synced on next ./stag.sh run
+cd ..
+./stag.sh
 ```
 
 ## Step 4: Create Team Configuration
@@ -139,7 +135,7 @@ gh api repos/accionlabs/stag-shared/teams/stag -X PUT -f permission=push
 ### Create Team Configuration File
 ```bash
 # Navigate to the base Jekyll repository
-cd stag-base-jekyll
+cd stag-notes
 
 # Create team configuration mapping friendly names to GitHub usernames
 cat > .stag-team.json << 'EOF'
@@ -238,11 +234,11 @@ gh repo delete accionlabs/stag-project-test-alpha --confirm
 ### Send Setup Instructions to Team
 Send team members the main setup guide with these details:
 
-**Base repository URL**: `git@github.com:accionlabs/stag-base-jekyll.git`
+**Base repository URL**: `git@github.com:accionlabs/stag-notes.git`
 
 **Team member onboarding steps**:
-1. Clone base repository: `git clone git@github.com:accionlabs/stag-base-jekyll.git`
-2. Navigate to directory: `cd stag-base-jekyll`
+1. Clone base repository: `git clone git@github.com:accionlabs/stag-notes.git`
+2. Navigate to directory: `cd stag-notes`
 3. Install dependencies: `bundle install`
 4. Configure git: `git config user.name "[Your Name]"` (must match `.stag-team.json`)
 5. Authenticate GitHub: `gh auth login`
@@ -602,7 +598,7 @@ gh repo list accionlabs --search stag --json name,sshUrl --jq '.[] | .sshUrl' | 
 done
 
 # Backup team configuration
-cp ../stag-base-jekyll/.stag-team.json ./
+cp ../stag-notes/.stag-team.json ./
 ```
 
 ### Recovery Procedures

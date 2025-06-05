@@ -1,6 +1,12 @@
 source "https://rubygems.org"
 
 gem "jekyll", "~> 4.3.0"
+gem "base64" 
+gem "csv" 
+gem "logger" 
+gem "ostruct" 
+gem "stringio" 
+gem "bigdecimal"
 
 group :jekyll_plugins do
   gem "jekyll-feed", "~> 0.12"

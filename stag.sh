@@ -596,8 +596,6 @@ EOF
 # IMPROVED REPOSITORY SYNCHRONIZATION
 # =============================================================================
 
-# Replace the sync_repository function in your stag.sh with this improved version:
-
 sync_repository() {
     local repo_type=$1
     local repo_name=$2
@@ -616,6 +614,13 @@ sync_repository() {
     fi
     
     echo -n "${SYNC} Syncing $repo_type ($repo_name)... "
+    
+    # IMPORTANT FIX: Create parent directory if it doesn't exist (for projects)
+    local parent_dir=$(dirname "$local_path")
+    if [ ! -d "$parent_dir" ]; then
+        mkdir -p "$parent_dir"
+        log_info "Created parent directory: $parent_dir"
+    fi
     
     # Check if local path exists and is a git repo
     if [ ! -d "$local_path/.git" ]; then
@@ -663,6 +668,11 @@ sync_repository() {
             rm -rf "$temp_backup"
         else
             # No local content, just clone
+            # IMPORTANT FIX: Ensure the parent directory exists before cloning
+            if [ ! -d "$(dirname "$local_path")" ]; then
+                mkdir -p "$(dirname "$local_path")"
+            fi
+            
             if git clone "$repo_url" "$local_path" >/dev/null 2>&1; then
                 echo -e "${GREEN}✓ (cloned)${NC}"
             else
@@ -758,6 +768,7 @@ sync_repository() {
     fi
 }
 
+# Also update sync_all_repositories to provide better feedback
 sync_all_repositories() {
     log_step "Starting repository synchronization..."
     
@@ -779,10 +790,19 @@ sync_all_repositories() {
     fi
     
     # Sync project repositories
+    if [ ${#projects[@]} -gt 0 ]; then
+        log_info "Syncing ${#projects[@]} project(s)..."
+    fi
+    
     for project_repo in "${projects[@]}"; do
         if [ -n "$project_repo" ]; then
             local project_name=$(echo "$project_repo" | sed 's/^stag-project-//')
-            sync_repository "project" "$project_repo" "$DOCS_DIR/projects/$project_name"
+            local project_path="$DOCS_DIR/projects/$project_name"
+            
+            # Log which project we're syncing
+            log_info "Processing project: $project_name"
+            
+            sync_repository "project" "$project_repo" "$project_path"
         fi
     done
     

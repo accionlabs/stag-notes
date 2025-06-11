@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if page.title %}{{ page.title }} - {% endif %}{{ site.title }}</title>
-    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+    <link rel="icon" type="image/png" href="/assets/img/favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/assets/img/favicon/favicon.svg" />
+    <link rel="shortcut icon" href="/assets/img/favicon/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/favicon/apple-touch-icon.png" />
+    <link rel="manifest" href="/assets/img/favicon/site.webmanifest" />    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
       <!-- Mermaid Script -->
    <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -46,6 +50,7 @@
         <!-- Navigation sidebar -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
+                <img src="{{ '/assets/img/logo.png' | relative_url }}" alt="{{ site.title }} Logo" class="logo">
                 <h2><a href="{{ '/' | relative_url }}">{{ site.title }}</a></h2>
             </div>
             <div class="nav-content">

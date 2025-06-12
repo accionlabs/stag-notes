@@ -1,0 +1,530 @@
+/* STAG Inline Comments Styles - Enhanced Visibility */
+
+/* Inline comment containers */
+.stag-comment-inline {
+  margin: 1rem 0;
+  border: 2px solid #3b82f6;
+  border-radius: 8px;
+  background: #eff6ff;
+  transition: all 0.2s ease;
+  max-width: 100%;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+}
+
+.stag-comment-inline:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.15);
+}
+
+.stag-comment-inline.expanded {
+  border-color: #1d4ed8;
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
+}
+
+/* Comment trigger (clickable preview) - Enhanced visibility */
+.stag-comment-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-radius: 6px;
+  margin: 2px;
+}
+
+.stag-comment-trigger:hover {
+  background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
+}
+
+.stag-comment-inline.expanded .stag-comment-trigger {
+  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+  color: white;
+  border-bottom: 1px solid #1e3a8a;
+  border-radius: 6px 6px 0 0;
+  margin: 0;
+}
+
+.stag-comment-inline.expanded .stag-comment-trigger .stag-comment-preview strong,
+.stag-comment-inline.expanded .stag-comment-trigger .stag-comment-snippet {
+  color: white;
+}
+
+.stag-comment-icon {
+  font-size: 18px;
+  color: #1d4ed8;
+  flex-shrink: 0;
+}
+
+.stag-comment-inline.expanded .stag-comment-icon {
+  color: white;
+}
+
+.stag-comment-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.stag-comment-preview strong {
+  color: #1e40af;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.stag-comment-snippet {
+  color: #1e40af;
+  margin-left: 6px;
+  opacity: 0.8;
+}
+
+.stag-reply-count {
+  background: #1e40af;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.stag-expand-indicator {
+  color: #1e40af;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  font-weight: bold;
+}
+
+.stag-comment-inline.expanded .stag-expand-indicator {
+  transform: rotate(180deg);
+  color: white;
+}
+
+/* Comment content (expandable section) */
+.stag-comment-content {
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 0 0 6px 6px;
+}
+
+.stag-comment-main {
+  padding: 18px;
+}
+
+.stag-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.stag-comment-author {
+  font-weight: 700;
+  font-size: 15px;
+  color: #374151;
+}
+
+.stag-comment-inline.valid-author .stag-comment-author {
+  color: #059669;
+}
+
+.stag-comment-inline.invalid-author .stag-comment-author {
+  color: #dc2626;
+  position: relative;
+}
+
+.stag-comment-inline.invalid-author .stag-comment-author::after {
+  content: "⚠";
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.stag-comment-date {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.stag-comment-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #ddd6fe;
+  color: #5b21b6;
+}
+
+.stag-comment-type.question {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.stag-comment-type.suggestion {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.stag-comment-type.note {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.stag-comment-type.urgent {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.stag-comment-type.approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.stag-comment-title {
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.stag-comment-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+/* Comment replies/threads */
+.stag-comment-replies {
+  border-top: 1px solid #f3f4f6;
+  background: #f9fafb;
+}
+
+.stag-comment-reply {
+  padding: 14px 18px;
+  border-bottom: 1px solid #f3f4f6;
+  margin-left: 18px;
+  border-left: 4px solid #e5e7eb;
+  background: #ffffff;
+  position: relative;
+}
+
+.stag-comment-reply:last-child {
+  border-bottom: none;
+}
+
+.stag-comment-reply.valid-author {
+  border-left-color: #10b981;
+}
+
+.stag-comment-reply.invalid-author {
+  border-left-color: #ef4444;
+}
+
+.stag-comment-reply .stag-comment-header {
+  margin-bottom: 8px;
+}
+
+.stag-comment-reply .stag-comment-body {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Enhanced summary section with comment index */
+.stag-comments-summary {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 2px solid #3b82f6;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 1rem 0 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+  color: #1e40af;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.1);
+}
+
+.stag-comments-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stag-comments-summary-icon {
+  font-size: 20px;
+}
+
+.stag-comments-summary-text {
+  flex: 1;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.stag-comments-summary-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stag-comment-action-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stag-comment-action-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.stag-comment-action-btn.secondary {
+  background: #6b7280;
+}
+
+.stag-comment-action-btn.secondary:hover {
+  background: #4b5563;
+}
+
+/* Comment index */
+.stag-comments-index {
+  border-top: 1px solid #bfdbfe;
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.stag-comments-index-header {
+  font-weight: 700;
+  color: #1e40af;
+  margin-bottom: 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stag-comments-index-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 6px;
+}
+
+.stag-comment-index-item {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.stag-comment-index-item:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+}
+
+.stag-comment-index-item-type {
+  background: #1e40af;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.stag-comment-index-item-author {
+  font-weight: 600;
+  color: #1e40af;
+  flex-shrink: 0;
+}
+
+.stag-comment-index-item-title {
+  color: #374151;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .stag-comment-trigger {
+    padding: 12px 14px;
+    flex-wrap: wrap;
+  }
+  
+  .stag-comment-preview {
+    font-size: 13px;
+  }
+  
+  .stag-comment-main {
+    padding: 14px;
+  }
+  
+  .stag-comment-reply {
+    margin-left: 10px;
+    padding: 12px 14px;
+  }
+  
+  .stag-comments-summary {
+    padding: 14px 16px;
+  }
+  
+  .stag-comments-index-list {
+    grid-template-columns: 1fr;
+  }
+  
+  .stag-comments-summary-actions {
+    justify-content: stretch;
+  }
+  
+  .stag-comment-action-btn {
+    flex: 1;
+  }
+}
+
+/* Print styles - Hide comments in printed versions */
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .stag-comment-trigger {
+    padding: 10px 12px;
+    flex-wrap: wrap;
+  }
+  
+  .stag-comment-preview {
+    font-size: 13px;
+  }
+  
+  .stag-comment-main {
+    padding: 12px;
+  }
+  
+  .stag-comment-reply {
+    margin-left: 8px;
+    padding: 10px 12px;
+  }
+}
+
+/* Print styles - Hide comments in printed versions */
+@media print {
+  .stag-comment-inline,
+  .stag-comments-summary {
+    display: none !important;
+  }
+  
+  /* Ensure normal text flow without comment gaps */
+  .stag-comment-inline + p,
+  .stag-comment-inline + h1,
+  .stag-comment-inline + h2,
+  .stag-comment-inline + h3,
+  .stag-comment-inline + h4,
+  .stag-comment-inline + h5,
+  .stag-comment-inline + h6,
+  .stag-comment-inline + ul,
+  .stag-comment-inline + ol,
+  .stag-comment-inline + blockquote {
+    margin-top: 0 !important;
+    page-break-before: auto !important;
+  }
+}
+
+/* Optional: Hide comments when generating clean exports */
+.export-mode .stag-comment-inline,
+.export-mode .stag-comments-summary,
+.client-version .stag-comment-inline,
+.client-version .stag-comments-summary {
+  display: none !important;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .stag-comment-inline {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  .stag-comment-inline:hover {
+    border-color: #4b5563;
+  }
+  
+  .stag-comment-inline.expanded {
+    background: #111827;
+    border-color: #6366f1;
+  }
+  
+  .stag-comment-trigger:hover {
+    background: #374151;
+  }
+  
+  .stag-comment-inline.expanded .stag-comment-trigger {
+    background: #1e3a8a;
+    border-bottom-color: #4b5563;
+  }
+  
+  .stag-comment-content {
+    background: #111827;
+    border-top-color: #4b5563;
+  }
+  
+  .stag-comment-preview strong {
+    color: #f9fafb;
+  }
+  
+  .stag-comment-snippet {
+    color: #9ca3af;
+  }
+  
+  .stag-comment-author {
+    color: #f9fafb;
+  }
+  
+  .stag-comment-date {
+    color: #9ca3af;
+    background: #374151;
+  }
+  
+  .stag-comment-body {
+    color: #d1d5db;
+  }
+  
+  .stag-comment-replies {
+    background: #1f2937;
+    border-top-color: #4b5563;
+  }
+  
+  .stag-comment-reply {
+    background: #111827;
+    border-bottom-color: #4b5563;
+    border-left-color: #4b5563;
+  }
+  
+  .stag-comments-summary {
+    background: #1e3a8a;
+    border-color: #3b82f6;
+    color: #bfdbfe;
+  }
+}

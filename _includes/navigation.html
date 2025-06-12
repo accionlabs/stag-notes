@@ -1,6 +1,6 @@
 {% comment %}
-  Hierarchical navigation generator for _docs folder
-  Fixed version that properly handles single subfolders
+  Enhanced hierarchical navigation generator for _docs folder with comment indicators
+  Maintains all existing functionality while adding comment support
 {% endcomment %}
 
 {% assign docs_pages = site.docs | where_exp: "item", "item.nav_exclude != true" %}
@@ -95,12 +95,20 @@
       {% assign is_current_folder = true %}
     {% endif %}
     
+    {% comment %} Check if this folder contains comments {% endcomment %}
+    {% assign folder_has_comments = folder_path | folder_contains_comments %}
+    
     <li class="nav-folder" data-depth="0" data-path="{{ folder_name }}">
       <div class="nav-folder-header {% if is_current_folder %}active{% endif %}">
         {% if folder_index_page %}
           <a href="{{ folder_index_page.url | relative_url }}" class="folder-name-link">
             <span class="folder-icon">📁</span>
-            <span class="folder-name">{{ folder_name }}</span>
+            <span class="folder-name">
+              {{ folder_name }}
+              {% if folder_has_comments %}
+                <span class="folder-comment-indicator" title="This folder contains documents with comments">💬</span>
+              {% endif %}
+            </span>
             <span class="item-count">({{ total_children }})</span>
           </a>
           <button class="folder-toggle-only" data-target="folder-{{ folder_name | slugify }}" aria-expanded="{% if is_current_folder %}true{% else %}false{% endif %}">
@@ -109,7 +117,12 @@
         {% else %}
           <button class="folder-toggle" data-target="folder-{{ folder_name | slugify }}" aria-expanded="{% if is_current_folder %}true{% else %}false{% endif %}">
             <span class="folder-icon">📁</span>
-            <span class="folder-name">{{ folder_name }}</span>
+            <span class="folder-name">
+              {{ folder_name }}
+              {% if folder_has_comments %}
+                <span class="folder-comment-indicator" title="This folder contains documents with comments">💬</span>
+              {% endif %}
+            </span>
             <span class="item-count">({{ total_children }})</span>
             <span class="toggle-icon">{% if is_current_folder %}▼{% else %}▶{% endif %}</span>
           </button>
@@ -171,12 +184,20 @@
             {% assign is_current_subfolder = true %}
           {% endif %}
           
+          {% comment %} Check if this subfolder contains comments {% endcomment %}
+          {% assign subfolder_has_comments = subfolder_path | folder_contains_comments %}
+          
           <li class="nav-folder" data-depth="1" data-path="{{ subfolder_path }}" style="margin-left: 20px;">
             <div class="nav-folder-header {% if is_current_subfolder %}active{% endif %}">
               {% if subfolder_index_page %}
                 <a href="{{ subfolder_index_page.url | relative_url }}" class="folder-name-link">
                   <span class="folder-icon">📂</span>
-                  <span class="folder-name">{{ subfolder_name }}</span>
+                  <span class="folder-name">
+                    {{ subfolder_name }}
+                    {% if subfolder_has_comments %}
+                      <span class="folder-comment-indicator" title="This folder contains documents with comments">💬</span>
+                    {% endif %}
+                  </span>
                   <span class="item-count">({{ sub_total_children }})</span>
                 </a>
                 <button class="folder-toggle-only" data-target="folder-{{ subfolder_path | slugify }}" aria-expanded="{% if is_current_subfolder %}true{% else %}false{% endif %}">
@@ -185,7 +206,12 @@
               {% else %}
                 <button class="folder-toggle" data-target="folder-{{ subfolder_path | slugify }}" aria-expanded="{% if is_current_subfolder %}true{% else %}false{% endif %}">
                   <span class="folder-icon">📂</span>
-                  <span class="folder-name">{{ subfolder_name }}</span>
+                  <span class="folder-name">
+                    {{ subfolder_name }}
+                    {% if subfolder_has_comments %}
+                      <span class="folder-comment-indicator" title="This folder contains documents with comments">💬</span>
+                    {% endif %}
+                  </span>
                   <span class="item-count">({{ sub_total_children }})</span>
                   <span class="toggle-icon">{% if is_current_subfolder %}▼{% else %}▶{% endif %}</span>
                 </button>
@@ -235,12 +261,20 @@
                   {% assign is_current_sub_subfolder = true %}
                 {% endif %}
                 
+                {% comment %} Check if this sub-subfolder contains comments {% endcomment %}
+                {% assign sub_subfolder_has_comments = sub_subfolder_path | folder_contains_comments %}
+                
                 <li class="nav-folder" data-depth="2" data-path="{{ sub_subfolder_path }}" style="margin-left: 40px;">
                   <div class="nav-folder-header {% if is_current_sub_subfolder %}active{% endif %}">
                     {% if sub_subfolder_index_page %}
                       <a href="{{ sub_subfolder_index_page.url | relative_url }}" class="folder-name-link">
                         <span class="folder-icon">📄</span>
-                        <span class="folder-name">{{ sub_subfolder_name }}</span>
+                        <span class="folder-name">
+                          {{ sub_subfolder_name }}
+                          {% if sub_subfolder_has_comments %}
+                            <span class="folder-comment-indicator" title="This folder contains documents with comments">💬</span>
+                          {% endif %}
+                        </span>
                         <span class="item-count">({{ sub_sub_files_count }})</span>
                       </a>
                       <button class="folder-toggle-only" data-target="folder-{{ sub_subfolder_path | slugify }}" aria-expanded="{% if is_current_sub_subfolder %}true{% else %}false{% endif %}">
@@ -249,7 +283,12 @@
                     {% else %}
                       <button class="folder-toggle" data-target="folder-{{ sub_subfolder_path | slugify }}" aria-expanded="{% if is_current_sub_subfolder %}true{% else %}false{% endif %}">
                         <span class="folder-icon">📄</span>
-                        <span class="folder-name">{{ sub_subfolder_name }}</span>
+                        <span class="folder-name">
+                          {{ sub_subfolder_name }}
+                          {% if sub_subfolder_has_comments %}
+                            <span class="folder-comment-indicator" title="This folder contains documents with comments">💬</span>
+                          {% endif %}
+                        </span>
                         <span class="item-count">({{ sub_sub_files_count }})</span>
                         <span class="toggle-icon">{% if is_current_sub_subfolder %}▼{% else %}▶{% endif %}</span>
                       </button>
@@ -296,6 +335,10 @@
                         <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
                           <span class="file-icon">📄</span>
                           <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+                          {% assign file_comment_count = doc | doc_comment_count %}
+                          {% if file_comment_count > 0 %}
+                            <span class="comment-indicator" title="{{ file_comment_count }} comment{% if file_comment_count != 1 %}s{% endif %} in this document">💬 {{ file_comment_count }}</span>
+                          {% endif %}
                         </a>
                       </li>
                     {% endfor %}
@@ -343,6 +386,10 @@
                   <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
                     <span class="file-icon">📄</span>
                     <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+                    {% assign file_comment_count = doc | doc_comment_count %}
+                    {% if file_comment_count > 0 %}
+                      <span class="comment-indicator" title="{{ file_comment_count }} comment{% if file_comment_count != 1 %}s{% endif %} in this document">💬 {{ file_comment_count }}</span>
+                    {% endif %}
                   </a>
                 </li>
               {% endfor %}
@@ -390,6 +437,10 @@
             <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
               <span class="file-icon">📄</span>
               <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+              {% assign file_comment_count = doc | doc_comment_count %}
+              {% if file_comment_count > 0 %}
+                <span class="comment-indicator" title="{{ file_comment_count }} comment{% if file_comment_count != 1 %}s{% endif %} in this document">💬 {{ file_comment_count }}</span>
+              {% endif %}
             </a>
           </li>
         {% endfor %}
@@ -416,6 +467,10 @@
       <a href="{{ doc.url | relative_url }}" class="nav-link {% if is_current %}current{% endif %}">
         <span class="file-icon">📄</span>
         <span class="file-name">{{ doc.title | default: doc.name | remove: ".md" }}</span>
+        {% assign file_comment_count = doc | doc_comment_count %}
+        {% if file_comment_count > 0 %}
+          <span class="comment-indicator" title="{{ file_comment_count }} comment{% if file_comment_count != 1 %}s{% endif %} in this document">💬 {{ file_comment_count }}</span>
+        {% endif %}
       </a>
     </li>
   {% endfor %}
@@ -521,6 +576,9 @@
 .folder-name {
   font-weight: 500;
   flex-grow: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .item-count {
@@ -576,6 +634,45 @@
   flex-grow: 1;
 }
 
+/* Comment indicator styles for navigation */
+.comment-indicator {
+  background: #1e40af;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.folder-comment-indicator {
+  background: #3b82f6;
+  color: white;
+  padding: 1px 4px;
+  border-radius: 8px;
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.folder-toggle:hover .folder-comment-indicator,
+.folder-name-link:hover .folder-comment-indicator {
+  opacity: 1;
+}
+
+/* Ensure indicators work well with current page styling */
+.nav-link.current .comment-indicator {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .nav-folder, .nav-file {
@@ -596,6 +693,26 @@
   
   .nav-file {
     margin-left: 10px !important;
+  }
+  
+  /* Make comment indicators smaller on mobile */
+  .comment-indicator {
+    font-size: 10px;
+    padding: 1px 4px;
+    margin-left: 4px;
+  }
+  
+  .folder-comment-indicator {
+    font-size: 9px;
+    margin-left: 4px;
+  }
+}
+
+/* Print styles - hide comment indicators */
+@media print {
+  .comment-indicator,
+  .folder-comment-indicator {
+    display: none !important;
   }
 }
 </style>

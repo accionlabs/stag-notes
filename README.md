@@ -27,7 +27,7 @@ The STAG system automatically manages three types of content with intelligent te
 
 | Folder | Repository Type | Purpose | Auto-Created |
 |--------|----------------|---------|--------------|
-| `_docs/private/` | `stag-private-[your-name]` | Personal methodologies and notes | ✅ Yes |
+| `_docs/private/` | local copy only | Personal methodologies and notes | ✅ Yes |
 | `_docs/shared/` | `stag-shared` | Team resources and templates | ➕ If accessible |
 | `_docs/projects/` | `stag-project-[project-name]` | Client work and deliverables | 🆕 Auto-created with team management |
 
@@ -64,6 +64,7 @@ gem install bundler jekyll
 ```
 
 **Windows:**
+
 - Download GitHub CLI from [cli.github.com](https://cli.github.com/)
 - Download jq from [stedolan.github.io/jq](https://stedolan.github.io/jq/download/)
 - Install Ruby from [rubyinstaller.org](https://rubyinstaller.org/)
@@ -157,6 +158,7 @@ EOF
 ```
 
 This will:
+
 - ✅ Validate team members exist in `.stag-team.json`
 - 🆕 Create GitHub repository `stag-project-alpha-strategy`
 - 🔒 Set `saurabh` as admin, `hemesh` and `nischal` as collaborators
@@ -166,6 +168,7 @@ This will:
 ### 3. Start Working
 
 The project is now ready:
+
 - Local folder: `_docs/projects/alpha-strategy/`
 - GitHub repo: `github.com/accionlabs/stag-project-alpha-strategy`
 - Team permissions: Automatically managed
@@ -179,6 +182,7 @@ The project is now ready:
 ```
 
 This single command:
+
 - 🔍 **Discovers** all STAG repositories you have access to
 - 🆕 **Creates** your private repository if it doesn't exist
 - 🆕 **Creates** new project repositories with team management
@@ -276,6 +280,7 @@ bundle install
 ```
 
 This will:
+
 - Create your private repository (`stag-private-[your-name]`)
 - Link the shared repository (if you have access)
 - Discover and link any project repositories you can access
@@ -307,6 +312,152 @@ _docs/
         ├── index.md          # Required: Team and project info
         └── presentations/
 ```
+
+## Content Creation Features
+
+### Front Matter
+
+Include YAML front matter in all markdown files:
+
+```yaml
+---
+title: "Document Title"
+description: "Brief description"
+date: 2025-01-15
+category: "methodology"
+tags: ["consulting", "strategy"]
+---
+```
+
+### Inline Comments and Collaboration
+
+The STAG system supports inline comments for team collaboration directly within your markdown content. Comments are version-controlled with your documents and work both online and offline.
+
+#### Basic Comment Syntax
+
+**Quick inline comments:**
+```markdown
+<!-- @hemesh (2025-01-15): This assumption needs validation with the client -->
+```
+
+**Structured comments with metadata:**
+```markdown
+<!-- COMMENT:
+author: saurabh
+date: 2025-01-15
+type: question
+title: Risk Assessment Gap
+---
+Should we add a comprehensive risk assessment section here? 
+This feels like a critical component that's missing from our analysis.
+-->
+```
+
+**Compact structured format:**
+```markdown
+<!-- COMMENT: @nischal | 2025-01-16 | suggestion
+We could improve this section by adding specific metrics and KPIs
+to measure the success of our recommendations.
+-->
+```
+
+#### Comment Threading
+
+Comments support threaded discussions using `>>` for replies:
+
+```markdown
+<!-- COMMENT:
+author: saurabh
+date: 2025-01-15
+type: question
+title: Pricing Strategy Discussion
+---
+What's our recommended pricing strategy for this client?
+Should we go with value-based or competitive pricing?
+
+>> @hemesh (2025-01-16): I suggest value-based pricing model
+>> @karteek (2025-01-17): Agreed, but we need competitive analysis first
+>> @saurabh (2025-01-17): Good points, let's schedule a pricing workshop
+-->
+```
+
+**Simple threaded comments:**
+```markdown
+<!-- @saurabh (2025-01-15): This timeline seems aggressive
+>> @pankaj (2025-01-16): We can extend Phase 2 by a week
+>> @saurabh (2025-01-16): Perfect, that addresses my concern -->
+```
+
+#### Comment Types
+
+Organize your comments using different types:
+
+| Type | Purpose | Example Usage |
+|------|---------|---------------|
+| `question` | Ask for clarification or input | Technical feasibility, client requirements |
+| `suggestion` | Propose improvements or alternatives | Process optimization, better approaches |
+| `note` | Document important information | Client feedback, external dependencies |
+| `action` | Track tasks and follow-ups | Meeting scheduling, document creation |
+
+#### Comment Integration
+
+Comments integrate seamlessly with your workflow:
+
+- **Team validation**: Authors are automatically validated against `.stag-team.json`
+- **Version control**: Comments sync with `./stag.sh` just like regular content
+- **Markdown compatibility**: Works in any markdown editor (VSCode, Obsidian, etc.)
+- **Offline support**: Add and edit comments without internet connection
+
+#### Example in Context
+
+```markdown
+# Digital Transformation Strategy
+
+## Executive Summary
+
+Our analysis reveals significant opportunities for modernization <!-- @saurabh (2025-01-15): Should we quantify "significant"?
+>> @hemesh (2025-01-16): Yes, let's add specific percentages and ROI figures --> across three key areas:
+
+1. **Technology Infrastructure** - Legacy systems modernization
+2. **Process Optimization** - Workflow automation opportunities  
+3. **Data Analytics** - Enhanced decision-making capabilities
+
+<!-- COMMENT:
+author: hemesh
+date: 2025-01-16
+type: suggestion
+title: Additional Area
+---
+Should we also include "Change Management" as a fourth key area?
+This is often the biggest challenge in digital transformations.
+
+>> @saurabh (2025-01-17): Great point! Change management is critical
+>> @karteek (2025-01-17): I agree, let's add it as the foundation area
+-->
+```
+
+### Mermaid Diagrams
+
+Include diagrams using fenced code blocks:
+
+```mermaid
+graph TD
+    A[Current State] --> B{Gap Analysis}
+    B --> C[Future State Design]
+    B --> D[Implementation Plan]
+    C --> E[Final Recommendations]
+    D --> E
+```
+
+### Tables
+
+Use markdown tables for structured data:
+
+| Phase | Duration | Deliverable |
+|-------|----------|-------------|
+| Discovery | 2 weeks | Current state assessment |
+| Analysis | 3 weeks | Gap analysis and recommendations |
+| Planning | 2 weeks | Implementation roadmap |
 
 ### 4. Regular Workflow
 
@@ -370,6 +521,7 @@ The script automatically:
 ### Smart Synchronization
 
 For each repository:
+
 - **Validates projects** with proper `index.md` and team info
 - **Creates missing repositories** for new projects with valid teams
 - **Syncs permissions** based on `index.md` team definitions
@@ -381,6 +533,7 @@ For each repository:
 ### Conflict Resolution
 
 When conflicts occur:
+
 - ✅ **Auto-resolves** by preferring remote changes
 - 📝 **Commits** resolution automatically
 - ⚠️ **Warns** you about conflicts in output
@@ -389,6 +542,7 @@ When conflicts occur:
 ### Project Creation Workflow
 
 When you create a new project folder:
+
 1. **Validation**: Script checks for `index.md` with valid front matter
 2. **Team validation**: Verifies all team members exist in `.stag-team.json`
 3. **Repository creation**: Creates GitHub repository `stag-project-[name]`
@@ -405,6 +559,7 @@ When you create a new project folder:
 **Auto-created**: Yes, if it doesn't exist
 
 **Content suggestions**:
+
 - Personal consulting frameworks
 - Industry insights and observations
 - Client relationship notes (confidential)
@@ -417,6 +572,7 @@ When you create a new project folder:
 **Access**: All STAG team members (if you're added to the team)
 
 **Content suggestions**:
+
 - Proposal templates
 - Presentation templates
 - Team methodologies and frameworks
@@ -429,46 +585,11 @@ When you create a new project folder:
 **Access**: Project team members only
 
 **Content structure**:
+
 - `proposal/` - Initial proposals and scope
 - `research/` - Background research and analysis
 - `presentations/` - Client presentations
 - `deliverables/` - Final project outputs
-
-## Markdown Best Practices
-
-### Front Matter
-Include YAML front matter in all markdown files:
-
-```yaml
----
-title: "Document Title"
-description: "Brief description"
-date: 2025-01-15
-category: "methodology"
-tags: ["consulting", "strategy"]
----
-```
-
-### Mermaid Diagrams
-Include diagrams using fenced code blocks:
-
-```mermaid
-graph TD
-    A[Current State] --> B{Gap Analysis}
-    B --> C[Future State Design]
-    B --> D[Implementation Plan]
-    C --> E[Final Recommendations]
-    D --> E
-```
-
-### Tables
-Use markdown tables for structured data:
-
-| Phase | Duration | Deliverable |
-|-------|----------|-------------|
-| Discovery | 2 weeks | Current state assessment |
-| Analysis | 3 weeks | Gap analysis and recommendations |
-| Planning | 2 weeks | Implementation roadmap |
 
 ## Security and Confidentiality
 
@@ -511,11 +632,13 @@ git config user.name "Your Name"
 ```
 
 **"Permission denied" for repositories**
+
 - Check if you're added to the STAG team
 - Contact admin to add you to specific projects
 - Run `./stag.sh discover` to refresh permissions
 
 **Sync conflicts**
+
 - Conflicts are auto-resolved (remote changes preferred)
 - Check `./stag.sh status` for any issues
 - If needed, manually resolve in the `_docs/` folders
@@ -535,47 +658,6 @@ git config user.name     # Your configured name
 rm .stag-config.json      # Clear cache
 ./stag.sh discover        # Rediscover repositories
 ```
-
-## Advanced Usage
-
-### Manual Repository Management
-
-While the auto-sync handles everything, you can still work with repositories manually:
-
-```bash
-# Navigate to documentation
-cd _docs
-
-# Check git status
-git status
-
-# Manual commit (auto-sync does this automatically)
-git add .
-git commit -m "Manual changes"
-
-# Manual subtree operations (not recommended)
-git subtree push --prefix=private git@github.com:accionlabs/stag-private-[name].git main
-```
-
-### Configuration File
-
-The script maintains `.stag-config.json`:
-
-```json
-{
-  "consultant": "john-smith",
-  "last_scan": "2025-01-15T14:30:00Z",
-  "repositories": {
-    "private": "stag-private-john-smith",
-    "shared": "stag-shared",
-    "projects": ["stag-project-alpha-strategy", "stag-project-beta-digital"]
-  }
-}
-```
-
-- **Cache duration**: 1 hour
-- **Auto-refresh**: When cache expires
-- **Manual refresh**: `./stag.sh discover`
 
 ## Advanced Usage
 

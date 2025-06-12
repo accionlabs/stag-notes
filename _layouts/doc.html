@@ -32,6 +32,7 @@
     height: 100%;
   }
 </style>
+<link rel="stylesheet" href="{{ '/assets/css/comments.css' | relative_url }}">
 </head>
 <body>
     <div class="container">
@@ -122,6 +123,11 @@
     </script>
 
     <script src="{{ '/assets/js/slides.js' | relative_url }}"></script>
+
+    {% if page.comments_html and page.comments_html != "" %}
+      {{ page.comments_html }}
+    {% endif %}
+    <script src="{{ '/assets/js/comments.js' | relative_url }}"></script>
 
 </body>
 </html>
